@@ -2,6 +2,7 @@ import {
   Activity,
   ChevronLeft,
   CircleUserRound,
+  FlaskConical,
   History,
   Info,
   Menu,
@@ -11,6 +12,7 @@ import {
   X,
 } from "lucide-react";
 import { useCallback, useState } from "react";
+// apiMode helpers are owned by SyntraApp; the sidebar only receives props.
 import { useNavigate } from "react-router";
 import { cn } from "@/lib/utils";
 import { useAuth } from "@/hooks/use-auth";
@@ -24,6 +26,10 @@ interface SidebarProps {
   /** Mobile drawer visibility. */
   open: boolean;
   onClose: () => void;
+  /** Current fake-API mode (drives the testing toggle). */
+  fakeApi: boolean;
+  /** Toggle fake-API mode (fires a toast, page reloads are not needed). */
+  onToggleFakeApi: (enabled: boolean) => void;
   apiOnline: boolean;
 }
 
@@ -34,6 +40,8 @@ function SidebarContent({
   active,
   onNavigate,
   collapsed,
+  fakeApi,
+  onToggleFakeApi,
   apiOnline,
   onToggleCollapse,
   onNavigateAway,
@@ -41,6 +49,8 @@ function SidebarContent({
   active: SyntraView;
   onNavigate: (view: SyntraView) => void;
   collapsed: boolean;
+  fakeApi: boolean;
+  onToggleFakeApi: (enabled: boolean) => void;
   apiOnline: boolean;
   onToggleCollapse?: () => void;
   onNavigateAway: () => void;
@@ -136,6 +146,31 @@ function SidebarContent({
           </div>
         )}
         {!collapsed && (
+          <button
+            type="button"
+            className="syn-nav-item w-full"
+            onClick={() => onToggleFakeApi(!fakeApi)}
+            aria-pressed={fakeApi}
+            title="Serve investigations from the in-browser fake API with simulated latency and failure triggers"
+          >
+            <FlaskConical
+              className={cn(
+                "size-4 shrink-0",
+                fakeApi ? "text-[var(--syntra-amber)]" : "text-muted-foreground",
+              )}
+            />
+            <span>Fake API</span>
+            <span
+              className={cn(
+                "ml-auto text-[10px] font-semibold tracking-wide",
+                fakeApi ? "text-[var(--syntra-amber)]" : "text-muted-foreground",
+              )}
+            >
+              {fakeApi ? "ON" : "OFF"}
+            </span>
+          </button>
+        )}
+        {!collapsed && (
           <button type="button" className="syn-nav-item" onClick={handleSignOut}>
             <X className="size-4 shrink-0" />
             <span>Sign out</span>
@@ -157,7 +192,15 @@ function SidebarContent({
   );
 }
 
-export function Sidebar({ active, onNavigate, open, onClose, apiOnline }: SidebarProps) {
+export function Sidebar({
+  active,
+  onNavigate,
+  open,
+  onClose,
+  fakeApi,
+  onToggleFakeApi,
+  apiOnline,
+}: SidebarProps) {
   // Read the persisted preference lazily so no effect-driven setState is needed.
   const [collapsed, setCollapsed] = useState(() => {
     try {
@@ -190,6 +233,8 @@ export function Sidebar({ active, onNavigate, open, onClose, apiOnline }: Sideba
           active={active}
           onNavigate={onNavigate}
           collapsed={collapsed}
+          fakeApi={fakeApi}
+          onToggleFakeApi={onToggleFakeApi}
           apiOnline={apiOnline}
           onToggleCollapse={toggleCollapsed}
           onNavigateAway={() => undefined}
@@ -210,6 +255,8 @@ export function Sidebar({ active, onNavigate, open, onClose, apiOnline }: Sideba
               active={active}
               onNavigate={onNavigate}
               collapsed={false}
+              fakeApi={fakeApi}
+              onToggleFakeApi={onToggleFakeApi}
               apiOnline={apiOnline}
               onNavigateAway={onClose}
             />

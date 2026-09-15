@@ -1,10 +1,12 @@
 import { lazy, Suspense, useCallback, useEffect, useState } from "react";
 import { useLocation, useNavigate } from "react-router";
+import { toast } from "sonner";
 import { Sidebar, type SyntraView } from "@/components/Sidebar";
 import Investigate from "@/pages/Investigate";
 import HistoryPage from "@/pages/History";
 import About from "@/pages/About";
 import { useApiStatus } from "@/hooks/useApiStatus";
+import { isFakeApiEnabled, setFakeApiEnabled } from "@/services/apiMode";
 
 // Advanced view is code-split: the default experience never loads it.
 const TechnicalView = lazy(() => import("@/pages/TechnicalView"));
@@ -35,6 +37,17 @@ export function SyntraApp({ view }: { view: SyntraView }) {
   const location = useLocation();
   const apiOnline = useApiStatus();
   const [drawerOpen, setDrawerOpen] = useState(false);
+  const [fakeApi, setFakeApi] = useState(() => isFakeApiEnabled());
+
+  const handleToggleFakeApi = useCallback((enabled: boolean) => {
+    setFakeApiEnabled(enabled);
+    setFakeApi(enabled);
+    toast(enabled ? "Fake API enabled" : "Live backend enabled", {
+      description: enabled
+        ? "Investigations are served in-browser with simulated latency. Type “fail” in a question to test the error state."
+        : "Investigations are sent to the Convex backend again.",
+    });
+  }, []);
 
   useEffect(() => {
     const onNavigate = (event: Event) => {
@@ -71,6 +84,8 @@ export function SyntraApp({ view }: { view: SyntraView }) {
         onNavigate={handleNavigate}
         open={drawerOpen}
         onClose={() => setDrawerOpen(false)}
+        fakeApi={fakeApi}
+        onToggleFakeApi={handleToggleFakeApi}
         apiOnline={apiOnline}
       />
       <div className="flex min-w-0 flex-1 flex-col">
