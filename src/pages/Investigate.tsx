@@ -144,7 +144,7 @@ export default function Investigate({ locationState }: InvestigateProps) {
  */
 function DemoStrip({ onRun }: { onRun: (question: string) => void }) {
   return (
-    <section className="mt-2 w-full" aria-label="Sample investigations">
+    <section className="mt-2 w-full" aria-label="Demo investigations">
       <p className="syn-section-title justify-center">{DEMO_HEADING}</p>
       <div className="mt-3 grid gap-2.5 sm:grid-cols-2 lg:grid-cols-3">
         {DEMO_PROMPTS.map((demo: DemoPrompt) => (
