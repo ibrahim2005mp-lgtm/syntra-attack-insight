@@ -101,7 +101,10 @@ export function SyntraApp({ view }: { view: SyntraView }) {
         }
         activeInvestigationId={activeInvestigationId}
       />
-      <div className="flex min-w-0 flex-1 flex-col">
+      {/* min-h-0 + overflow-hidden clamp this column to the shell height so
+          taller content scrolls inside WorkspacePage instead of stretching
+          the app beyond the viewport (page-level scrollbar + dead space). */}
+      <div className="flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden">
         <Suspense fallback={<ViewLoading />}>
           {view === "investigate" && <Investigate key="investigate" locationState={location.state} />}
           {view === "history" && <HistoryPage key="history" />}

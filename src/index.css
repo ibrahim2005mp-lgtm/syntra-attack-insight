@@ -196,6 +196,11 @@
     overflow: hidden;
     background: var(--syntra-bg);
   }
+  /* Flex children must never push the shell past the viewport — the
+     workspace scrolls internally via its own overflow container. */
+  .syn-app > * {
+    min-height: 0;
+  }
 
   /* Sidebar */
   .syn-sidebar {
