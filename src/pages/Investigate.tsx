@@ -6,6 +6,7 @@ import { NeutralBadge, StatusBadge } from "@/components/StatusBadge";
 import { ErrorState, LoadingState, NoticeState, SafetyResponse } from "@/components/results/States";
 import { InvestigationResultView } from "@/components/results/InvestigationResultView";
 import { useInvestigation } from "@/hooks/useInvestigation";
+import { DEMO_HEADING, DEMO_NOTE, DEMO_PROMPTS, type DemoPrompt } from "@/mock/demoPrompts";
 
 interface InvestigateProps {
   /** Router location state carrying a history-restore request. */
@@ -79,6 +80,7 @@ export default function Investigate({ locationState }: InvestigateProps) {
           <div className="w-full">
             <InvestigationInput onSubmit={ask} pending={pending} draft={draft} />
           </div>
+          <DemoStrip onRun={ask} />
         </div>
       )}
 
@@ -132,5 +134,36 @@ export default function Investigate({ locationState }: InvestigateProps) {
         </div>
       )}
     </WorkspacePage>
+  );
+}
+
+/**
+ * Demo strip on the empty screen: one click runs a sample investigation that
+ * exercises a distinct response state of the frontend. Labeled as demo data
+ * so it is never mistaken for canned or promotional content.
+ */
+function DemoStrip({ onRun }: { onRun: (question: string) => void }) {
+  return (
+    <section className="mt-2 w-full" aria-label="Sample investigations">
+      <p className="syn-section-title justify-center">{DEMO_HEADING}</p>
+      <div className="mt-3 grid gap-2.5 sm:grid-cols-2 lg:grid-cols-3">
+        {DEMO_PROMPTS.map((demo: DemoPrompt) => (
+          <button
+            key={demo.id}
+            type="button"
+            onClick={() => onRun(demo.question)}
+            className="syn-card syn-card-interactive flex flex-col gap-1 p-3.5 text-left"
+            title={demo.question}
+          >
+            <span className="flex items-center gap-2">
+              <demo.icon className="size-3.5 shrink-0 text-[var(--syntra-orange)]" aria-hidden="true" />
+              <span className="text-xs font-semibold text-foreground">{demo.label}</span>
+            </span>
+            <span className="text-[11px] leading-relaxed text-muted-foreground">{demo.hint}</span>
+          </button>
+        ))}
+      </div>
+      <p className="mt-2.5 text-center text-[10px] text-muted-foreground">{DEMO_NOTE}</p>
+    </section>
   );
 }
