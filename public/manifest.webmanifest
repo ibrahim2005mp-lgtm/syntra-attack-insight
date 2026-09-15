@@ -1,0 +1,17 @@
+{
+  "name": "SYNTRA — Offensive Cyber Attack RAG",
+  "short_name": "SYNTRA",
+  "description": "Evidence-grounded offensive cyber attack investigation",
+  "start_url": "/",
+  "display": "standalone",
+  "background_color": "#161311",
+  "theme_color": "#F97F1B",
+  "icons": [
+    {
+      "src": "/logo.svg",
+      "sizes": "any",
+      "type": "image/svg+xml",
+      "purpose": "any maskable"
+    }
+  ]
+}
