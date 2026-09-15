@@ -29,6 +29,11 @@ export interface Evidence {
   provenance: string;
 }
 
+/** One concrete attacker step inside a technique. */
+export interface TechniqueStep {
+  text: string;
+}
+
 export interface AttackStage {
   /** MITRE-style technique identifier, e.g. "T1566". */
   techniqueId: string;
@@ -38,6 +43,12 @@ export interface AttackStage {
   status: EvidenceStatus;
   /** Ordered evidence ids referencing Evidence.id. */
   evidenceIds: string[];
+  /** One-line attacker behavior description for the detail cards. */
+  description?: string;
+  /** Ordered attacker steps (numbered in the render). */
+  steps?: TechniqueStep[];
+  /** Whether SYNTRA's lab can validate this technique in isolation. */
+  labAvailable?: boolean;
 }
 
 export interface Entity {
@@ -83,6 +94,45 @@ export interface SourceRef {
   kind: string;
 }
 
+/* ------------------------------ Lab model ------------------------------ */
+
+export type LabPlatform = "windows" | "linux" | "android";
+
+export interface LabSessionStep {
+  /** Actor instruction, e.g. "Review the scenario and objective." */
+  text: string;
+}
+
+export interface LabEnvironment {
+  /** Lab id, e.g. "LAB-T1059". */
+  id: string;
+  /** Technique the lab validates, e.g. "T1059". */
+  techniqueId: string;
+  /** Technique the lab validates, e.g. "Command and Scripting Interpreter". */
+  techniqueName: string;
+  /** True when a lab exists for this technique. */
+  available: boolean;
+  /** e.g. "Controlled Technique Validation". */
+  labType: string;
+  /** Initially selected platform. */
+  platform: LabPlatform;
+  /** Human-readable runtime, e.g. "Windows Virtual Machine (VM)". */
+  runtimeEnvironment: string;
+  networkMode: string;
+  validationSource: string;
+  /** Objective sentence — safe, educational framing only. */
+  objective: string;
+  /** e.g. "10–15 Minutes". */
+  estimatedDuration: string;
+  difficulty: string;
+  /** Safety boundary statement shown under the objective. */
+  safetyBoundary: string;
+  /** Ordered guided steps (1..6). */
+  sessionSteps: LabSessionStep[];
+  /** One-line scenario objective shown in the lab panel. */
+  scenarioObjective: string;
+}
+
 export interface InvestigationReport {
   kind: "report";
   summary: string;
@@ -96,6 +146,8 @@ export interface InvestigationReport {
   sources: SourceRef[];
   evidenceStatus: EvidenceStatus;
   safetyStatus: SafetyStatus;
+  /** Optional isolated-lab metadata for the validation sections. */
+  lab?: LabEnvironment;
 }
 
 export type InvestigationResult =
@@ -178,4 +230,10 @@ export const ENTITY_KIND_LABEL: Record<Entity["kind"], string> = {
   cwe: "CWE",
   capec: "CAPEC",
   report: "CTI Report",
+};
+
+export const LAB_PLATFORM_LABEL: Record<LabPlatform, string> = {
+  windows: "Windows",
+  linux: "Linux",
+  android: "Android",
 };

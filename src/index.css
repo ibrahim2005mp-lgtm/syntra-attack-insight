@@ -510,6 +510,48 @@
     border-style: dashed;
     opacity: 0.85;
   }
+  /* Tinted evidence-state fills for chain and technique cards — the dark
+     analogues of the report's blue/green/yellow/red tiles. Color is always
+     paired with a status badge, never color-only. */
+  .syn-chain-stage[data-status="confirmed"] {
+    background: color-mix(in oklab, var(--syntra-success) 9%, var(--syntra-surface));
+  }
+  .syn-chain-stage[data-status="supported"] {
+    background: color-mix(in oklab, var(--syntra-amber) 9%, var(--syntra-surface));
+  }
+  .syn-chain-stage[data-status="unverified"],
+  .syn-chain-stage[data-status="insufficient"] {
+    background: color-mix(in oklab, var(--syntra-danger) 8%, var(--syntra-surface));
+  }
+
+  .syn-detail-label {
+    margin-top: 0.25rem;
+    font-size: 0.6875rem;
+    font-weight: 600;
+    letter-spacing: 0.06em;
+    text-transform: uppercase;
+    color: var(--foreground);
+  }
+
+  /* Lab availability strip on technique cards */
+  .syn-lab-availability {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+    border-radius: var(--radius-md);
+    border: 1px solid var(--syntra-border);
+    background: var(--syntra-surface-soft);
+    padding: 0.4375rem 0.625rem;
+    font-size: 0.75rem;
+    font-weight: 600;
+    color: var(--muted-foreground);
+  }
+  .syn-lab-availability-ok {
+    border-color: color-mix(in oklab, var(--syntra-success) 35%, transparent);
+    background: color-mix(in oklab, var(--syntra-success) 9%, transparent);
+    color: var(--syntra-success);
+  }
+
   .syn-chain-stage[data-status="terminal"] {
     background: var(--syntra-surface-soft);
     border-style: dashed;

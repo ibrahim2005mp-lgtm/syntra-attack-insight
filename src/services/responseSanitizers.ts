@@ -15,6 +15,7 @@ import type {
   EvidenceStatus,
   Investigation,
   InvestigationResult,
+  LabEnvironment,
   MitigationItem,
   Relationship,
   SourceRef,
@@ -23,6 +24,50 @@ import type {
 } from "@/types/investigation";
 
 const EVIDENCE_STATUSES: EvidenceStatus[] = ["confirmed", "supported", "unverified", "insufficient"];
+
+const LAB_PLATFORMS = ["windows", "linux", "android"] as const;
+
+/**
+ * Reduce an untrusted lab object into a validated LabEnvironment. Anything
+ * malformed drops the optional lab (the report renders fine without it).
+ */
+export function sanitizeLab(value: unknown): LabEnvironment | undefined {
+  if (typeof value !== "object" || value === null) return undefined;
+  const l = value as Record<string, unknown>;
+  const techniqueId = sanitizeText(l.techniqueId, 24);
+  if (!techniqueId) return undefined;
+  const platform = LAB_PLATFORMS.includes(l.platform as (typeof LAB_PLATFORMS)[number])
+    ? (l.platform as LabEnvironment["platform"])
+    : "windows";
+  return {
+    id: sanitizeText(l.id, 40) || `LAB-${techniqueId}`,
+    techniqueId,
+    techniqueName: sanitizeText(l.techniqueName, 120) || techniqueId,
+    available: l.available === true,
+    labType: sanitizeText(l.labType, 120) || "Controlled Technique Validation",
+    platform,
+    runtimeEnvironment: sanitizeText(l.runtimeEnvironment, 120) || "Virtual Machine",
+    networkMode: sanitizeText(l.networkMode, 120) || "Isolated Lab Network",
+    validationSource: sanitizeText(l.validationSource, 160) || "SYNTRA Research Lab",
+    objective: sanitizeText(l.objective, 400),
+    estimatedDuration: sanitizeText(l.estimatedDuration, 60) || "10–15 Minutes",
+    difficulty: sanitizeText(l.difficulty, 60) || "Intermediate",
+    safetyBoundary: sanitizeText(l.safetyBoundary, 400),
+    sessionSteps: (Array.isArray(l.sessionSteps) ? l.sessionSteps : [])
+      .slice(0, 8)
+      .map((step) =>
+        sanitizeText(
+          typeof step === "object" && step !== null
+            ? (step as Record<string, unknown>).text
+            : step,
+          200,
+        ),
+      )
+      .filter((text) => text.length > 0)
+      .map((text) => ({ text })),
+    scenarioObjective: sanitizeText(l.scenarioObjective, 400),
+  };
+}
 
 /** Coerce an untrusted value into a known evidence status. */
 export function sanitizeStatus(value: unknown): EvidenceStatus {
@@ -58,6 +103,20 @@ function sanitizeStage(value: unknown): AttackStage | null {
     tactic: sanitizeText(s.tactic, 60),
     status: sanitizeStatus(s.status),
     evidenceIds: sanitizeTextList(s.evidenceIds, 40).slice(0, 10),
+    description: sanitizeText(s.description, 400) || undefined,
+    steps: (Array.isArray(s.steps) ? s.steps : [])
+      .slice(0, 8)
+      .map((step) =>
+        sanitizeText(
+          typeof step === "object" && step !== null
+            ? (step as Record<string, unknown>).text
+            : step,
+          200,
+        ),
+      )
+      .filter((text) => text.length > 0)
+      .map((text) => ({ text })),
+    labAvailable: typeof s.labAvailable === "boolean" ? s.labAvailable : undefined,
   };
 }
 
@@ -179,6 +238,7 @@ export function sanitizeInvestigationResult(raw: unknown): InvestigationResult {
       .slice(0, 20),
     evidenceStatus: sanitizeStatus(r.evidenceStatus),
     safetyStatus: "safe",
+    lab: sanitizeLab(r.lab),
   };
   return report;
 }

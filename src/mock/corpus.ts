@@ -15,6 +15,7 @@ import type {
   Evidence,
   EvidenceStatus,
   InvestigationResult,
+  LabEnvironment,
   MitigationItem,
   Relationship,
   SourceRef,
@@ -82,6 +83,15 @@ const apt3Chain: AttackStage[] = [
     tactic: "Initial Access",
     status: "confirmed",
     evidenceIds: ["EV-1"],
+    description:
+      "The attacker gains initial access by tricking the target into interacting with malicious content such as an email link or attachment.",
+    steps: [
+      { text: "Craft a phishing email or message" },
+      { text: "Deliver the message to the target" },
+      { text: "Victim interacts with the content" },
+      { text: "Initial access is established" },
+    ],
+    labAvailable: false,
   },
   {
     techniqueId: "T1059",
@@ -89,6 +99,15 @@ const apt3Chain: AttackStage[] = [
     tactic: "Execution",
     status: "confirmed",
     evidenceIds: ["EV-2"],
+    description:
+      "The attacker uses command-line or scripting environments to execute commands or scripts on the compromised system.",
+    steps: [
+      { text: "Execute a command or script" },
+      { text: "Use native tools (cmd, bash, PowerShell)" },
+      { text: "Download or run additional payloads" },
+      { text: "Interact with the operating system" },
+    ],
+    labAvailable: true,
   },
   {
     techniqueId: "T1087",
@@ -96,6 +115,15 @@ const apt3Chain: AttackStage[] = [
     tactic: "Discovery",
     status: "supported",
     evidenceIds: ["EV-3"],
+    description:
+      "The attacker identifies accounts on the system, including local, domain, and cloud accounts, to map privilege opportunities.",
+    steps: [
+      { text: "Enumerate local accounts" },
+      { text: "Enumerate domain accounts" },
+      { text: "Collect account information" },
+      { text: "Look for privileged accounts" },
+    ],
+    labAvailable: false,
   },
   {
     techniqueId: "T1018",
@@ -103,6 +131,15 @@ const apt3Chain: AttackStage[] = [
     tactic: "Discovery",
     status: "supported",
     evidenceIds: ["EV-4"],
+    description:
+      "The attacker identifies remote systems on the network that may be reachable and relevant for later movement.",
+    steps: [
+      { text: "Scan network for live hosts" },
+      { text: "Identify remote systems" },
+      { text: "Collect system information" },
+      { text: "Map the internal environment" },
+    ],
+    labAvailable: false,
   },
   {
     techniqueId: "T1021",
@@ -110,8 +147,41 @@ const apt3Chain: AttackStage[] = [
     tactic: "Lateral Movement",
     status: "unverified",
     evidenceIds: ["EV-5"],
+    labAvailable: false,
   },
 ];
+
+/**
+ * Isolated-lab definition for the APT3 report. The lab validates T1059 —
+ * the highest-confidence execution technique — in a sandboxed VM.
+ */
+const apt3Lab: LabEnvironment = {
+  id: "LAB-T1059",
+  techniqueId: "T1059",
+  techniqueName: "Command and Scripting Interpreter",
+  available: true,
+  labType: "Controlled Technique Validation",
+  platform: "windows",
+  runtimeEnvironment: "Windows Virtual Machine (VM)",
+  networkMode: "Isolated Lab Network",
+  validationSource: "SYNTRA Research Lab",
+  objective:
+    "Safely observe and validate the behavior associated with T1059 inside a controlled and isolated environment.",
+  estimatedDuration: "10–15 Minutes",
+  difficulty: "Intermediate",
+  safetyBoundary:
+    "The lab runs in an isolated environment and is not intended for use against external or unauthorized systems.",
+  sessionSteps: [
+    { text: "Review the scenario and objective." },
+    { text: "Access the Windows VM and open the required tools." },
+    { text: "Execute the provided commands or script in the lab environment." },
+    { text: "Observe the expected behavior (processes, logs, artifacts)." },
+    { text: "Collect evidence and compare with the expected results." },
+    { text: "Complete the lab and view the validation result." },
+  ],
+  scenarioObjective:
+    "Safely observe and validate the behavior associated with T1059 inside an isolated Windows virtual machine.",
+};
 
 const apt3Entities: Entity[] = [
   { id: "E-actor", kind: "threat_actor", label: "APT3", detail: "Also tracked as Gothic Panda, Buckshot. China-nexus intrusions since ~2010." },
@@ -283,6 +353,7 @@ function reportResult(args: {
   mitigation: MitigationItem[];
   missingEvidence: string[];
   sources: SourceRef[];
+  lab?: LabEnvironment;
 }): InvestigationResult {
   const statuses = args.chain.map((s) => s.status);
   const evidenceStatus: EvidenceStatus = statuses.every((s) => s === "confirmed")
@@ -305,6 +376,7 @@ function reportResult(args: {
     sources: args.sources,
     evidenceStatus,
     safetyStatus: "safe",
+    lab: args.lab,
   };
 }
 
@@ -423,6 +495,7 @@ export const DOMAIN_MATCHERS: CorpusMatch[] = [
           "No evidence establishes a C2 infrastructure mapping for this campaign in the available sources.",
         ],
         sources: apt3Sources,
+        lab: apt3Lab,
       }),
   },
   {
