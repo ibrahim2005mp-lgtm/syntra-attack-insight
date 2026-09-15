@@ -317,10 +317,22 @@ function SidebarContent({
 
   return (
     <>
-      {/* Brand */}
+      {/* Brand — the mark doubles as the expand control when collapsed */}
       <div className={cn("flex items-center gap-2.5 px-4 pb-2 pt-5", collapsed && "justify-center px-0")}>
         {collapsed ? (
-          <SyntraMark size={26} />
+          onToggleCollapse ? (
+            <button
+              type="button"
+              className="flex size-9 items-center justify-center rounded-md text-foreground transition-colors hover:bg-sidebar-accent"
+              aria-label="Expand sidebar"
+              title="Expand sidebar"
+              onClick={onToggleCollapse}
+            >
+              <SyntraMark size={26} />
+            </button>
+          ) : (
+            <SyntraMark size={26} />
+          )
         ) : (
           <SyntraLogo size={26} />
         )}
@@ -509,18 +521,21 @@ export function Sidebar({
         className={cn("syn-sidebar hidden md:flex", collapsed && "collapsed")}
         aria-label="SYNTRA navigation"
       >
-        <SidebarContent
-          active={active}
-          onNavigate={onNavigate}
-          collapsed={collapsed}
-          fakeApi={fakeApi}
-          onToggleFakeApi={onToggleFakeApi}
-          apiOnline={apiOnline}
-          onToggleCollapse={toggleCollapsed}
-          onNavigateAway={() => undefined}
-          onRestoreInvestigation={onRestoreInvestigation}
-          activeInvestigationId={activeInvestigationId}
-        />
+        {/* Keyed by collapsed state so the entrance animation replays on expand */}
+        <div className="syn-sidebar-inner" key={collapsed ? "collapsed" : "expanded"}>
+          <SidebarContent
+            active={active}
+            onNavigate={onNavigate}
+            collapsed={collapsed}
+            fakeApi={fakeApi}
+            onToggleFakeApi={onToggleFakeApi}
+            apiOnline={apiOnline}
+            onToggleCollapse={toggleCollapsed}
+            onNavigateAway={() => undefined}
+            onRestoreInvestigation={onRestoreInvestigation}
+            activeInvestigationId={activeInvestigationId}
+          />
+        </div>
       </aside>
 
       {/* Mobile drawer */}

@@ -203,12 +203,34 @@
     flex-direction: column;
     background: var(--sidebar);
     border-right: 1px solid var(--sidebar-border);
-    transition: width 180ms ease;
+    transition: width 220ms cubic-bezier(0.32, 0.72, 0, 1);
     width: 240px;
     flex-shrink: 0;
+    overflow: hidden;
   }
   .syn-sidebar.collapsed {
     width: 64px;
+  }
+
+  /* Inner content fades/slides in when the sidebar expands (replayed by
+     remounting via key on the wrapper). */
+  .syn-sidebar-inner {
+    display: flex;
+    flex-direction: column;
+    flex: 1 1 auto;
+    min-height: 0;
+    min-width: 0;
+    animation: syn-sidebar-in 200ms ease;
+  }
+  @keyframes syn-sidebar-in {
+    from {
+      opacity: 0;
+      transform: translateX(-6px);
+    }
+    to {
+      opacity: 1;
+      transform: translateX(0);
+    }
   }
 
   .syn-nav-item {
@@ -614,5 +636,10 @@
     animation-iteration-count: 1 !important;
     transition-duration: 0.01ms !important;
     scroll-behavior: auto !important;
+  }
+  .syn-sidebar,
+  .syn-sidebar-inner {
+    transition: none !important;
+    animation: none !important;
   }
 }
