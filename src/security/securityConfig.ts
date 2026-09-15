@@ -16,6 +16,13 @@ export const SECURITY_CONFIG = {
   maxExcerptLength: 600,
   /** Max stored/displayed question length (defense against oversized fields). */
   maxDisplayLength: 2000,
+  /** Password policy for local (email + password) accounts. */
+  password: {
+    minLength: 8,
+    maxLength: 128,
+    /** Must contain at least one lowercase letter, one uppercase letter and one digit. */
+    requireMixedCaseAndDigit: true,
+  },
 } as const;
 
 /**
