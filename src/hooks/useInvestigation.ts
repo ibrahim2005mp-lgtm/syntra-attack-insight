@@ -69,6 +69,10 @@ export function useInvestigation() {
         error: null,
         finishedAt: Date.now(),
       });
+      // Let the shell (sidebar Recent list) know a stored investigation exists.
+      window.dispatchEvent(
+        new CustomEvent("syntra:history-updated", { detail: investigation.id }),
+      );
       toast.success("Investigation complete", {
         description: verdictOf(investigation),
       });

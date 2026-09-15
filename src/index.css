@@ -251,6 +251,71 @@
     border: 0;
   }
 
+  /* Recent investigations list (sidebar) — chat-title style */
+  .syn-recent-list {
+    display: flex;
+    flex-direction: column;
+    gap: 1px;
+    overflow-y: auto;
+    min-height: 0;
+    scrollbar-width: thin;
+    scrollbar-color: var(--sidebar-border) transparent;
+    padding: 0 0.25rem;
+  }
+  .syn-recent-list::-webkit-scrollbar {
+    width: 6px;
+  }
+  .syn-recent-list::-webkit-scrollbar-thumb {
+    background: var(--sidebar-border);
+    border-radius: 3px;
+  }
+  .syn-recent-item {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+    width: 100%;
+    text-align: left;
+    border-radius: var(--radius-md);
+    padding: 0.4375rem 0.625rem;
+    font-size: 0.8125rem;
+    line-height: 1.35;
+    color: var(--muted-foreground);
+    transition: color 120ms ease, background-color 120ms ease;
+    white-space: nowrap;
+  }
+  .syn-recent-item:hover {
+    color: var(--foreground);
+    background: var(--sidebar-accent);
+  }
+  .syn-recent-item.active {
+    color: var(--foreground);
+    background: var(--syntra-orange-soft);
+  }
+  .syn-recent-item.active .syn-recent-dot {
+    color: var(--syntra-orange);
+  }
+  .syn-recent-dot {
+    flex: 0 0 auto;
+    color: var(--sidebar-border);
+    transition: color 120ms ease;
+  }
+  .syn-recent-item:hover .syn-recent-dot {
+    color: var(--muted-foreground);
+  }
+  .syn-recent-title {
+    flex: 1 1 auto;
+    min-width: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+  .syn-recent-meta {
+    flex: 0 0 auto;
+    font-family: var(--syntra-font-mono);
+    font-size: 0.625rem;
+    color: var(--sidebar-border);
+  }
+
   /* Workspace panels */
   .syn-card {
     background: var(--syntra-surface);

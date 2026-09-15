@@ -10,7 +10,7 @@ import { DEMO_HEADING, DEMO_NOTE, DEMO_PROMPTS, type DemoPrompt } from "@/mock/d
 
 interface InvestigateProps {
   /** Router location state carrying a history-restore request. */
-  locationState?: { restoreId?: string } | null;
+  locationState?: { restoreId?: string; restoreNonce?: number } | null;
 }
 
 function formatTimestamp(ms: number): string {
@@ -35,12 +35,27 @@ export default function Investigate({ locationState }: InvestigateProps) {
   const [draft, setDraft] = useState<string | undefined>(undefined);
 
   const restoreId = locationState?.restoreId;
+  const restoreNonce = locationState?.restoreNonce;
 
   useEffect(() => {
     if (restoreId) {
       void restore(restoreId);
     }
-  }, [restoreId, restore]);
+  }, [restoreId, restoreNonce, restore]);
+
+  // Tell the shell which investigation is open so the sidebar Recent list can
+  // highlight it; clears when the workspace resets or unmounts.
+  const activeId = result?.id ?? null;
+  useEffect(() => {
+    window.dispatchEvent(
+      new CustomEvent("syntra:active-investigation", { detail: activeId }),
+    );
+    return () => {
+      window.dispatchEvent(
+        new CustomEvent("syntra:active-investigation", { detail: null }),
+      );
+    };
+  }, [activeId]);
 
   const handleNewInvestigation = useCallback(() => {
     reset();

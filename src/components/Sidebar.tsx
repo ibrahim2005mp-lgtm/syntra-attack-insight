@@ -11,10 +11,12 @@ import {
   ShieldCheck,
   X,
 } from "lucide-react";
-import { useCallback, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import { useNavigate } from "react-router";
 import { cn } from "@/lib/utils";
 import { useAuth } from "@/hooks/use-auth";
+import { getHistory } from "@/services/api";
+import type { HistoryItem } from "@/types/investigation";
 import { SyntraLogo, SyntraMark } from "./Logo";
 
 export type SyntraView = "investigate" | "history" | "about" | "technical";
@@ -30,9 +32,16 @@ interface SidebarProps {
   /** Toggle fake-API mode (fires a toast, page reloads are not needed). */
   onToggleFakeApi: (enabled: boolean) => void;
   apiOnline: boolean;
+  /** Restore a stored investigation by id (Recent list click). */
+  onRestoreInvestigation: (id: string) => void;
+  /** Id of the investigation currently open in the workspace. */
+  activeInvestigationId: string | null;
 }
 
 const STORAGE_KEY = "syntra.sidebar.collapsed";
+
+/** How many recent investigation titles to show in the sidebar. */
+const RECENT_LIMIT = 12;
 
 /** Inner nav used by both the desktop sidebar and the mobile drawer. */
 function SidebarContent({
@@ -44,6 +53,8 @@ function SidebarContent({
   apiOnline,
   onToggleCollapse,
   onNavigateAway,
+  onRestoreInvestigation,
+  activeInvestigationId,
 }: {
   active: SyntraView;
   onNavigate: (view: SyntraView) => void;
@@ -53,9 +64,32 @@ function SidebarContent({
   apiOnline: boolean;
   onToggleCollapse?: () => void;
   onNavigateAway: () => void;
+  onRestoreInvestigation: (id: string) => void;
+  activeInvestigationId: string | null;
 }) {
   const navigate = useNavigate();
   const { user, signOut } = useAuth();
+  const [recent, setRecent] = useState<HistoryItem[] | null>(null);
+
+  // Load once, then refresh whenever a new investigation completes. The
+  // workspace dispatches `syntra:history-updated` on completion.
+  const refreshRecent = useCallback(() => {
+    let cancelled = false;
+    getHistory().then((rows) => {
+      if (!cancelled) setRecent(rows);
+    });
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
+  useEffect(refreshRecent, [refreshRecent]);
+
+  useEffect(() => {
+    const onHistoryUpdated = () => refreshRecent();
+    window.addEventListener("syntra:history-updated", onHistoryUpdated);
+    return () => window.removeEventListener("syntra:history-updated", onHistoryUpdated);
+  }, [refreshRecent]);
 
   const go = (view: SyntraView) => {
     onNavigate(view);
@@ -116,6 +150,48 @@ function SidebarContent({
           {!collapsed && <span>Technical View</span>}
         </button>
       </nav>
+
+      {/* Recent investigations — chat-title style; hidden while collapsed */}
+      {!collapsed && (
+        <>
+          <hr className="syn-nav-divider" />
+          <p className="syn-section-title px-4 pb-1.5 pt-1">Recent</p>
+          {recent === null ? (
+            <div className="syn-recent-list px-1.5 pb-2">
+              {Array.from({ length: 4 }).map((_, i) => (
+                <div key={i} className="syn-sweep h-6 rounded-md" aria-hidden="true" />
+              ))}
+            </div>
+          ) : recent.length === 0 ? (
+            <p className="px-4 pb-2 text-[11px] leading-relaxed text-muted-foreground">
+              Investigations you run appear here so you can reopen them.
+            </p>
+          ) : (
+            <div className="syn-recent-list" role="list" aria-label="Recent investigations">
+              {recent.slice(0, RECENT_LIMIT).map((item) => (
+                <button
+                  key={item.id}
+                  type="button"
+                  role="listitem"
+                  className={cn(
+                    "syn-recent-item",
+                    item.id === activeInvestigationId && "active",
+                  )}
+                  title={item.question}
+                  aria-current={item.id === activeInvestigationId ? "true" : undefined}
+                  onClick={() => {
+                    onRestoreInvestigation(item.id);
+                    onNavigateAway();
+                  }}
+                >
+                  <Radar className="syn-recent-dot size-3 shrink-0" aria-hidden="true" />
+                  <span className="syn-recent-title">{item.question}</span>
+                </button>
+              ))}
+            </div>
+          )}
+        </>
+      )}
 
       <div className="flex-1" />
 
@@ -199,6 +275,8 @@ export function Sidebar({
   fakeApi,
   onToggleFakeApi,
   apiOnline,
+  onRestoreInvestigation,
+  activeInvestigationId,
 }: SidebarProps) {
   // Read the persisted preference lazily so no effect-driven setState is needed.
   const [collapsed, setCollapsed] = useState(() => {
@@ -237,6 +315,8 @@ export function Sidebar({
           apiOnline={apiOnline}
           onToggleCollapse={toggleCollapsed}
           onNavigateAway={() => undefined}
+          onRestoreInvestigation={onRestoreInvestigation}
+          activeInvestigationId={activeInvestigationId}
         />
       </aside>
 
@@ -258,6 +338,8 @@ export function Sidebar({
               onToggleFakeApi={onToggleFakeApi}
               apiOnline={apiOnline}
               onNavigateAway={onClose}
+              onRestoreInvestigation={onRestoreInvestigation}
+              activeInvestigationId={activeInvestigationId}
             />
           </div>
         </div>
