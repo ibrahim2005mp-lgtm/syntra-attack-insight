@@ -29,7 +29,7 @@ function Section({
     <div className="syn-section-title">
       <span className="syn-section-num">{num}</span>
       {icon}
-      <span>{title}</span>
+      <span className="transition-colors group-hover:text-foreground">{title}</span>
       {collapsible && (
         <span className="ml-auto">
           <ChevronDown className={`size-3.5 transition-transform ${open ? "" : "-rotate-90"}`} aria-hidden="true" />
@@ -43,7 +43,7 @@ function Section({
       {collapsible ? (
         <button
           type="button"
-          className="w-full text-left"
+          className="group w-full rounded-md py-0.5 text-left"
           onClick={() => setOpen((v) => !v)}
           aria-expanded={open}
         >

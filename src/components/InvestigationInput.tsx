@@ -113,7 +113,7 @@ export function InvestigationInput({ onSubmit, onCancel, pending, draft, autoFoc
             <button
               type="submit"
               disabled={pending || overBudget}
-              className="inline-flex h-9 items-center gap-2 rounded-md bg-[var(--syntra-orange)] px-4 text-sm font-semibold tracking-wide text-[color-mix(in_oklab,var(--syntra-orange)_20%,black)] transition-colors hover:bg-[color-mix(in_oklab,var(--syntra-orange)_88%,white)] disabled:cursor-not-allowed disabled:opacity-50"
+              className="syn-btn-primary inline-flex h-9 items-center gap-2 rounded-md bg-[var(--syntra-orange)] px-4 text-sm font-semibold tracking-wide text-[color-mix(in_oklab,var(--syntra-orange)_20%,black)] disabled:cursor-not-allowed disabled:opacity-50 disabled:transform-none"
             >
               <Radar className="size-4" aria-hidden="true" />
               INVESTIGATE

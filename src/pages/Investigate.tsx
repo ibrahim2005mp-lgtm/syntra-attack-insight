@@ -57,7 +57,7 @@ export default function Investigate({ locationState }: InvestigateProps) {
           <button
             type="button"
             onClick={handleNewInvestigation}
-            className="inline-flex h-8 items-center gap-1.5 rounded-md bg-[var(--syntra-orange)] px-3 text-xs font-semibold tracking-wide text-[color-mix(in_oklab,var(--syntra-orange)_20%,black)] transition-colors hover:bg-[color-mix(in_oklab,var(--syntra-orange)_88%,white)]"
+            className="syn-btn-primary inline-flex h-8 items-center gap-1.5 rounded-md bg-[var(--syntra-orange)] px-3 text-xs font-semibold tracking-wide text-[color-mix(in_oklab,var(--syntra-orange)_20%,black)]"
           >
             <PlusCircle className="size-3.5" aria-hidden="true" />
             New Investigation

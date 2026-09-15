@@ -1,5 +1,6 @@
 import { ArrowDown, ArrowRight, Ban, Check, Copy } from "lucide-react";
 import { useMemo, useState } from "react";
+import { toast } from "sonner";
 import { StatusBadge } from "@/components/StatusBadge";
 import type { AttackStage } from "@/types/investigation";
 
@@ -20,7 +21,13 @@ function StageCard({
 }) {
   const [copied, setCopied] = useState(false);
   const handleCopy = () => {
-    void navigator.clipboard?.writeText(stage.techniqueId).catch(() => undefined);
+    void navigator.clipboard?.writeText(stage.techniqueId).then(() => {
+      toast.success(`Copied ${stage.techniqueId}`, {
+        description: "Technique ID copied to clipboard.",
+      });
+    }).catch(() => {
+      toast.error("Copy failed", { description: "Clipboard access was denied." });
+    });
     onCopyTechniqueId?.(stage.techniqueId);
     setCopied(true);
     window.setTimeout(() => setCopied(false), 1200);

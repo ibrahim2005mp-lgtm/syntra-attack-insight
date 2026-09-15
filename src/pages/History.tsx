@@ -60,7 +60,7 @@ export default function HistoryPage() {
               <button
                 type="button"
                 onClick={() => handleRestore(item.id)}
-                className="syn-card flex w-full flex-wrap items-center gap-x-3 gap-y-1.5 p-3.5 text-left transition-colors hover:border-[var(--syntra-orange)]"
+                className="syn-card syn-card-interactive flex w-full flex-wrap items-center gap-x-3 gap-y-1.5 p-3.5 text-left"
               >
                 <Radar className="size-4 shrink-0 text-[var(--syntra-orange)]" aria-hidden="true" />
                 <span className="min-w-0 flex-1 truncate text-sm text-foreground">{item.question}</span>
