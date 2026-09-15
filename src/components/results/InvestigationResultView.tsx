@@ -1,4 +1,5 @@
 import { ChevronDown, Fingerprint, Link2, Boxes, ShieldQuestion, BookOpen, Eye } from "lucide-react";
+import { cn } from "@/lib/utils";
 import { useCallback, useMemo, useState } from "react";
 import { AttackChain } from "./AttackChain";
 import { Detection, Mitigation } from "./DefenseSections";
@@ -106,31 +107,38 @@ export function InvestigationResultView({
         </div>
       </Section>
 
-      {/* 02 — Attack chain + evidence context */}
+      {/* 02 — Attack chain + evidence context. The evidence side column only
+          exists while a stage is selected, so the chain keeps the full width
+          otherwise (no reserved empty space). */}
       <Section num="02" icon={<Boxes className="size-3.5 text-[var(--syntra-orange)]" aria-hidden="true" />} title="Attack Chain">
-        <div className="grid gap-4 lg:grid-cols-[minmax(0,1fr)_360px]">
+        <div
+          className={cn(
+            "grid gap-4",
+            selectedStage ? "lg:grid-cols-[minmax(0,1fr)_360px]" : "grid-cols-1",
+          )}
+        >
           <div className="min-w-0">
             <AttackChain stages={report.attackChain} onOpenEvidence={handleOpenStageEvidence} onCopyTechniqueId={callbacks.onCopyTechniqueId} />
           </div>
-          {/* Desktop evidence side panel; mobile renders below */}
-          <div className="hidden lg:block">
-            {selectedStage && (
-              <EvidencePanel
-                title={`${selectedStage.techniqueId} — ${selectedStage.techniqueName}`}
-                items={selectedEvidence}
-                onClose={() => setSelectedStage(null)}
-              />
-            )}
-          </div>
-          <div className="lg:hidden">
-            {selectedStage && (
-              <EvidencePanel
-                title={`${selectedStage.techniqueId} — ${selectedStage.techniqueName}`}
-                items={selectedEvidence}
-                onClose={() => setSelectedStage(null)}
-              />
-            )}
-          </div>
+          {selectedStage && (
+            <>
+              {/* Desktop evidence side panel; mobile renders below */}
+              <div className="hidden lg:block">
+                <EvidencePanel
+                  title={`${selectedStage.techniqueId} — ${selectedStage.techniqueName}`}
+                  items={selectedEvidence}
+                  onClose={() => setSelectedStage(null)}
+                />
+              </div>
+              <div className="lg:hidden">
+                <EvidencePanel
+                  title={`${selectedStage.techniqueId} — ${selectedStage.techniqueName}`}
+                  items={selectedEvidence}
+                  onClose={() => setSelectedStage(null)}
+                />
+              </div>
+            </>
+          )}
         </div>
       </Section>
 
