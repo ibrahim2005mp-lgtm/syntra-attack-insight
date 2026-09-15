@@ -8,7 +8,6 @@ import {
   Info,
   Menu,
   MoreHorizontal,
-  Network,
   Pencil,
   Pin,
   PinOff,
@@ -40,7 +39,7 @@ import {
 } from "@/components/ui/dropdown-menu";
 import { SyntraLogo, SyntraMark } from "./Logo";
 
-export type SyntraView = "investigate" | "history" | "about" | "technical";
+export type SyntraView = "investigate" | "history" | "about";
 
 interface SidebarProps {
   active: SyntraView;
@@ -361,15 +360,6 @@ function SidebarContent({
         <button type="button" className={cn("syn-nav-item", active === "about" && "active")} onClick={() => go("about")} title="About">
           <Info className="size-4 shrink-0" />
           {!collapsed && <span>About</span>}
-        </button>
-      </nav>
-
-      <hr className="syn-nav-divider" />
-
-      <nav className="flex flex-col gap-1 px-2.5" aria-label="Technical">
-        <button type="button" className={cn("syn-nav-item", active === "technical" && "active")} onClick={() => go("technical")} title="Technical View">
-          <Network className="size-4 shrink-0" />
-          {!collapsed && <span>Technical View</span>}
         </button>
       </nav>
 

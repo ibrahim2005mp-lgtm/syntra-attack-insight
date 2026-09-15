@@ -11,7 +11,7 @@ const PRINCIPLES = [
   {
     icon: Workflow,
     title: "Structured attack analysis",
-    body: "Results are organized as summary, attack chain, entities and relationships, detection, mitigation, and missing evidence — the structure defenders and analysts actually use.",
+    body: "Results are organized as summary, identified entities, attack chain, technique details with steps, detection, mitigation, evidence and sources — the structure defenders and analysts actually use.",
   },
   {
     icon: ShieldCheck,

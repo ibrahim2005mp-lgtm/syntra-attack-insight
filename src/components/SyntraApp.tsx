@@ -1,4 +1,4 @@
-import { lazy, Suspense, useCallback, useEffect, useState } from "react";
+import { Suspense, useCallback, useEffect, useState } from "react";
 import { useLocation, useNavigate } from "react-router";
 import { toast } from "sonner";
 import { Sidebar, type SyntraView } from "@/components/Sidebar";
@@ -8,14 +8,10 @@ import About from "@/pages/About";
 import { useApiStatus } from "@/hooks/useApiStatus";
 import { isFakeApiEnabled, setFakeApiEnabled } from "@/services/apiMode";
 
-// Advanced view is code-split: the default experience never loads it.
-const TechnicalView = lazy(() => import("@/pages/TechnicalView"));
-
 const VIEW_ROUTES: Record<SyntraView, string> = {
   investigate: "/investigate",
   history: "/history",
   about: "/about",
-  technical: "/technical",
 };
 
 function ViewLoading() {
@@ -109,7 +105,6 @@ export function SyntraApp({ view }: { view: SyntraView }) {
           {view === "investigate" && <Investigate key="investigate" locationState={location.state} />}
           {view === "history" && <HistoryPage key="history" />}
           {view === "about" && <About key="about" />}
-          {view === "technical" && <TechnicalView key="technical" />}
         </Suspense>
       </div>
     </div>

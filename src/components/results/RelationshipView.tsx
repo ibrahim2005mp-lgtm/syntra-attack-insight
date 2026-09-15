@@ -3,7 +3,8 @@ import type { Relationship } from "@/types/investigation";
 
 /**
  * Relationships as compact connected rows: FROM →(label) TO.
- * Deliberately not a graph — the full graph lives behind Technical View.
+ * Deliberately not a graph — relationships render as readable edges so the
+ * report stays evidence-centered and easy to scan.
  */
 export function RelationshipView({ relationships }: { relationships: Relationship[] }) {
   if (relationships.length === 0) {

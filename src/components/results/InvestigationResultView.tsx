@@ -5,7 +5,6 @@ import {
   Fingerprint,
   Link2,
   MonitorCog,
-  ShieldQuestion,
   Users,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
@@ -14,7 +13,6 @@ import { AttackChain } from "./AttackChain";
 import { Detection, Mitigation } from "./DefenseSections";
 import { IdentifiedEntities } from "./IdentifiedEntities";
 import { EvidencePanel } from "./EvidencePanel";
-import { MissingEvidence } from "./MissingEvidence";
 import { LabEnvironmentOverview, IsolatedLab, LabValidation } from "./LabSections";
 import { TechniqueDetails } from "./TechniqueDetails";
 import { SourceList } from "./SourceList";
@@ -210,20 +208,13 @@ export function InvestigationResultView({
         </div>
       </Section>
 
-      {/* Missing evidence — always visible when present */}
-      {report.missingEvidence.length > 0 && (
-        <Section num="07" icon={<ShieldQuestion className="size-3.5 text-[var(--syntra-amber)]" aria-hidden="true" />} title="Missing Evidence">
-          <MissingEvidence items={report.missingEvidence} />
-        </Section>
-      )}
-
-      {/* 07/08/09 — Lab validation (only when the backend provides a lab) */}
+      {/* 07/08 — Lab validation (only when the backend provides a lab) */}
       {report.lab && (
         <>
-          <Section num="08" icon={<Cpu className="size-3.5 text-[var(--syntra-orange)]" aria-hidden="true" />} title="Controlled Attack Validation">
+          <Section num="07" icon={<Cpu className="size-3.5 text-[var(--syntra-orange)]" aria-hidden="true" />} title="Controlled Attack Validation">
             <LabValidation lab={report.lab} />
           </Section>
-          <Section num="09" icon={<MonitorCog className="size-3.5 text-[var(--syntra-orange)]" aria-hidden="true" />} title="Isolated Lab Environment">
+          <Section num="08" icon={<MonitorCog className="size-3.5 text-[var(--syntra-orange)]" aria-hidden="true" />} title="Isolated Lab Environment">
             <div className="flex flex-col gap-4">
               <LabEnvironmentOverview lab={report.lab} />
               <IsolatedLab lab={report.lab} />

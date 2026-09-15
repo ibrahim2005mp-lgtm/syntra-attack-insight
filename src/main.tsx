@@ -22,7 +22,6 @@ const NotFound = lazy(() => import("./pages/NotFound.tsx"));
 function viewForPath(pathname: string): SyntraView {
   if (pathname.startsWith("/history")) return "history";
   if (pathname.startsWith("/about")) return "about";
-  if (pathname.startsWith("/technical")) return "technical";
   return "investigate";
 }
 
@@ -158,14 +157,6 @@ createRoot(document.getElementById("root")!).render(
               />
               <Route
                 path="/about"
-                element={
-                  <RequireAuth>
-                    <WorkspaceRoutes />
-                  </RequireAuth>
-                }
-              />
-              <Route
-                path="/technical"
                 element={
                   <RequireAuth>
                     <WorkspaceRoutes />
