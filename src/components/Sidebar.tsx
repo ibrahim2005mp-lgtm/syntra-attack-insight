@@ -12,7 +12,6 @@ import {
   X,
 } from "lucide-react";
 import { useCallback, useState } from "react";
-// apiMode helpers are owned by SyntraApp; the sidebar only receives props.
 import { useNavigate } from "react-router";
 import { cn } from "@/lib/utils";
 import { useAuth } from "@/hooks/use-auth";
