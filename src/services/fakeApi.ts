@@ -93,17 +93,78 @@ export async function fakeGetInvestigation(id: string): Promise<Investigation | 
 
 export async function fakeGetHistory(): Promise<HistoryItem[]> {
   await delay(200);
-  return historyStore.map((item) => ({
-    id: item.id,
-    question: item.question,
-    createdAt: item.createdAt,
-    evidenceStatus:
-      item.result.kind === "report"
-        ? item.result.evidenceStatus
-        : item.result.kind === "safety"
-          ? "insufficient"
-          : "unverified",
-  }));
+  return historyStore
+    .filter((item) => item.archived !== true)
+    .sort((a, b) => {
+      const pa = a.pinned === true ? 1 : 0;
+      const pb = b.pinned === true ? 1 : 0;
+      if (pa !== pb) return pb - pa; // pinned first
+      return b.createdAt - a.createdAt; // newest first
+    })
+    .map((item) => ({
+      id: item.id,
+      question: item.title ?? item.question,
+      createdAt: item.createdAt,
+      evidenceStatus:
+        item.result.kind === "report"
+          ? item.result.evidenceStatus
+          : item.result.kind === "safety"
+            ? "insufficient"
+            : "unverified",
+      pinned: item.pinned === true,
+    }));
+}
+
+/** Session-local organization flags, mirroring the backend schema. */
+interface FakeFlags {
+  title?: string;
+  pinned?: boolean;
+  archived?: boolean;
+}
+
+function findFake(id: string): (Investigation & FakeFlags) | undefined {
+  return historyStore.find((item) => item.id === id);
+}
+
+export async function fakeRenameInvestigation(
+  id: string,
+  title: string,
+): Promise<{ id: string; title: string }> {
+  await delay(180);
+  const item = findFake(id);
+  if (!item) throw new Error("not_found");
+  item.title = title;
+  return { id, title };
+}
+
+export async function fakeSetInvestigationPinned(
+  id: string,
+  pinned: boolean,
+): Promise<{ id: string; pinned: boolean }> {
+  await delay(140);
+  const item = findFake(id);
+  if (!item) throw new Error("not_found");
+  item.pinned = pinned || undefined;
+  return { id, pinned };
+}
+
+export async function fakeSetInvestigationArchived(
+  id: string,
+  archived: boolean,
+): Promise<{ id: string; archived: boolean }> {
+  await delay(140);
+  const item = findFake(id);
+  if (!item) throw new Error("not_found");
+  item.archived = archived || undefined;
+  return { id, archived };
+}
+
+export async function fakeDeleteInvestigation(id: string): Promise<{ id: string }> {
+  await delay(160);
+  const index = historyStore.findIndex((item) => item.id === id);
+  if (index === -1) throw new Error("not_found");
+  historyStore.splice(index, 1);
+  return { id };
 }
 
 export async function fakeApiStatus(): Promise<{

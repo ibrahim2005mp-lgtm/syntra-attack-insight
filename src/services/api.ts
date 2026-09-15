@@ -15,7 +15,11 @@
  */
 import { api } from "@/convex/_generated/api";
 import type { Id } from "@/convex/_generated/dataModel";
-import { clampDisplayText, validateInvestigationQuestion } from "@/security/inputValidation";
+import {
+  clampDisplayText,
+  validateInvestigationQuestion,
+  validateInvestigationTitle,
+} from "@/security/inputValidation";
 import { sanitizeInvestigation, sanitizeStatus } from "./responseSanitizers";
 import type {
   HistoryItem,
@@ -25,9 +29,13 @@ import { mapApiError } from "./apiErrors";
 import { isFakeApiEnabled } from "./apiMode";
 import {
   fakeApiStatus,
+  fakeDeleteInvestigation,
   fakeGetHistory,
   fakeGetInvestigation,
   fakeInvestigateQuestion,
+  fakeRenameInvestigation,
+  fakeSetInvestigationArchived,
+  fakeSetInvestigationPinned,
 } from "./fakeApi";
 
 /** Narrowly-typed accessor for the generated Convex API module. */
@@ -38,6 +46,10 @@ function convexApi() {
       getInvestigation: (args: { id: Id<"investigations"> }) => Promise<unknown>;
       listHistory: (args: Record<string, never>) => Promise<unknown>;
       apiStatus: (args: Record<string, never>) => Promise<unknown>;
+      renameInvestigation: (args: { id: Id<"investigations">; title: string }) => Promise<unknown>;
+      setInvestigationPinned: (args: { id: Id<"investigations">; pinned: boolean }) => Promise<unknown>;
+      setInvestigationArchived: (args: { id: Id<"investigations">; archived: boolean }) => Promise<unknown>;
+      deleteInvestigation: (args: { id: Id<"investigations"> }) => Promise<unknown>;
     };
   }).investigations;
 }
@@ -92,6 +104,78 @@ export async function getInvestigation(id: string): Promise<Investigation | null
   }
 }
 
+/**
+ * Rename a stored investigation. Validates through the frontend security
+ * layer first; the backend re-validates independently.
+ */
+export async function renameInvestigation(id: string, title: string): Promise<string> {
+  const validation = validateInvestigationTitle(title);
+  if (!validation.valid || validation.value === undefined) {
+    const messages: Record<string, string> = {
+      empty: "Please enter a title.",
+      too_long: "Titles are limited to 120 characters.",
+      invalid_characters: "The title contains characters that are not supported.",
+      suspicious: "This input cannot be used as a title.",
+    };
+    throw Object.assign(
+      new Error(messages[validation.error ?? "empty"] ?? "Invalid title."),
+      { kind: "validation" },
+    );
+  }
+  if (isFakeApiEnabled()) {
+    await fakeRenameInvestigation(id, validation.value);
+    return validation.value;
+  }
+  try {
+    await convexApi().renameInvestigation({
+      id: id as Id<"investigations">,
+      title: validation.value,
+    });
+    return validation.value;
+  } catch (error) {
+    throw mapApiError(error);
+  }
+}
+
+export async function setInvestigationPinned(id: string, pinned: boolean): Promise<void> {
+  if (isFakeApiEnabled()) {
+    await fakeSetInvestigationPinned(id, pinned);
+    return;
+  }
+  try {
+    await convexApi().setInvestigationPinned({ id: id as Id<"investigations">, pinned });
+  } catch (error) {
+    throw mapApiError(error);
+  }
+}
+
+export async function setInvestigationArchived(id: string, archived: boolean): Promise<void> {
+  if (isFakeApiEnabled()) {
+    await fakeSetInvestigationArchived(id, archived);
+    return;
+  }
+  try {
+    await convexApi().setInvestigationArchived({
+      id: id as Id<"investigations">,
+      archived,
+    });
+  } catch (error) {
+    throw mapApiError(error);
+  }
+}
+
+export async function deleteInvestigation(id: string): Promise<void> {
+  if (isFakeApiEnabled()) {
+    await fakeDeleteInvestigation(id);
+    return;
+  }
+  try {
+    await convexApi().deleteInvestigation({ id: id as Id<"investigations"> });
+  } catch (error) {
+    throw mapApiError(error);
+  }
+}
+
 export async function getHistory(): Promise<HistoryItem[]> {
   if (isFakeApiEnabled()) {
     return fakeGetHistory();
@@ -110,6 +194,7 @@ export async function getHistory(): Promise<HistoryItem[]> {
           createdAt: typeof r.createdAt === "number" ? r.createdAt : 0,
           evidenceStatus:
             r.statusKind === "refused" ? "insufficient" : sanitizeStatus(r.statusKind),
+          pinned: r.pinned === true,
         };
       })
       .filter((item): item is HistoryItem => item !== null)

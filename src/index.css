@@ -283,9 +283,15 @@
     transition: color 120ms ease, background-color 120ms ease;
     white-space: nowrap;
   }
-  .syn-recent-item:hover {
+  .syn-recent-item:hover,
+  .syn-recent-item[data-menu-open="true"] {
     color: var(--foreground);
     background: var(--sidebar-accent);
+  }
+  .syn-recent-item[data-renaming="true"] {
+    background: var(--syntra-surface-soft);
+    border: 1px solid color-mix(in oklab, var(--syntra-orange) 45%, var(--syntra-border));
+    white-space: normal;
   }
   .syn-recent-item.active {
     color: var(--foreground);

@@ -42,7 +42,15 @@ const schema = defineSchema(
       result: v.any(),
       /** Coarse status for History display: report status | "refused" | "no_results". */
       statusKind: v.string(),
-    }).index("by_user_created", ["userId", "createdAt"]),
+      /** Sidebar title override (user rename). Absent = use question. */
+      title: v.optional(v.string()),
+      /** User-pinned investigations sort first in the sidebar. */
+      pinned: v.optional(v.boolean()),
+      /** Archived investigations are hidden from the sidebar list. */
+      archived: v.optional(v.boolean()),
+    })
+      .index("by_user_created", ["userId", "createdAt"])
+      .index("by_user_pinned", ["userId", "pinned"]),
   },
   {
     schemaValidation: false,

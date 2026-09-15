@@ -110,6 +110,12 @@ export interface Investigation {
   question: string;
   createdAt: number;
   result: InvestigationResult;
+  /** Sidebar title override (user rename). */
+  title?: string;
+  /** User-pinned investigations sort first in the sidebar. */
+  pinned?: boolean;
+  /** Archived investigations are hidden from the sidebar list. */
+  archived?: boolean;
 }
 
 export interface HistoryItem {
@@ -117,6 +123,8 @@ export interface HistoryItem {
   question: string;
   createdAt: number;
   evidenceStatus: EvidenceStatus;
+  /** True when the user pinned this investigation. */
+  pinned?: boolean;
 }
 
 export const EVIDENCE_STATUS_LABEL: Record<EvidenceStatus, string> = {

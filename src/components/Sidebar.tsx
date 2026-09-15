@@ -1,22 +1,43 @@
 import {
   Activity,
+  Archive,
   ChevronLeft,
   CircleUserRound,
   FlaskConical,
   History,
   Info,
   Menu,
+  MoreHorizontal,
   Network,
+  Pencil,
+  Pin,
+  PinOff,
   Radar,
+  Share,
   ShieldCheck,
+  Trash2,
   X,
 } from "lucide-react";
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { useNavigate } from "react-router";
+import { toast } from "sonner";
 import { cn } from "@/lib/utils";
 import { useAuth } from "@/hooks/use-auth";
-import { getHistory } from "@/services/api";
+import {
+  deleteInvestigation,
+  getHistory,
+  renameInvestigation,
+  setInvestigationArchived,
+  setInvestigationPinned,
+} from "@/services/api";
 import type { HistoryItem } from "@/types/investigation";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuSeparator,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
 import { SyntraLogo, SyntraMark } from "./Logo";
 
 export type SyntraView = "investigate" | "history" | "about" | "technical";
@@ -42,6 +63,195 @@ const STORAGE_KEY = "syntra.sidebar.collapsed";
 
 /** How many recent investigation titles to show in the sidebar. */
 const RECENT_LIMIT = 12;
+
+/**
+ * One row in the Recent list: title + pin indicator + overflow menu
+ * (Share, Rename, Pin, Archive, Delete — the pattern from modern chat UIs,
+ * restyled for SYNTRA).
+ */
+function RecentItem({
+  item,
+  active,
+  onOpen,
+  onChanged,
+}: {
+  item: HistoryItem;
+  active: boolean;
+  onOpen: (id: string) => void;
+  /** Called after any successful mutation so the list refetches. */
+  onChanged: () => void;
+}) {
+  const [renaming, setRenaming] = useState(false);
+  const [menuOpen, setMenuOpen] = useState(false);
+  const renameInputRef = useRef<HTMLInputElement>(null);
+
+  useEffect(() => {
+    if (renaming) renameInputRef.current?.select();
+  }, [renaming]);
+
+  const handleRename = () => {
+    const input = renameInputRef.current;
+    const value = input?.value ?? "";
+    if (input) input.value = ""; // clear for next time
+    setRenaming(false);
+    if (value.trim().length === 0 || value === item.question) return;
+    renameInvestigation(item.id, value)
+      .then(() => {
+        toast.success("Title updated", { description: "The investigation was renamed." });
+        onChanged();
+      })
+      .catch((error: unknown) => {
+        toast.error("Rename failed", {
+          description: error instanceof Error ? error.message : "Please try again.",
+        });
+      });
+  };
+
+  const handlePin = () => {
+    const next = !item.pinned;
+    setInvestigationPinned(item.id, next)
+      .then(() => {
+        toast(next ? "Pinned" : "Unpinned", {
+          description: next
+            ? "This investigation now sorts to the top of Recent."
+            : "This investigation returned to its normal position.",
+        });
+        onChanged();
+      })
+      .catch((error: unknown) => {
+        toast.error("Could not update pin", {
+          description: error instanceof Error ? error.message : "Please try again.",
+        });
+      });
+  };
+
+  const handleArchive = () => {
+    setInvestigationArchived(item.id, true)
+      .then(() => {
+        toast("Investigation archived", {
+          description: "It was removed from the Recent list. Find it again in History."
+        });
+        onChanged();
+      })
+      .catch((error: unknown) => {
+        toast.error("Could not archive", {
+          description: error instanceof Error ? error.message : "Please try again.",
+        });
+      });
+  };
+
+  const handleDelete = () => {
+    deleteInvestigation(item.id)
+      .then(() => {
+        toast.success("Investigation deleted", {
+          description: "The stored investigation was permanently removed.",
+        });
+        onChanged();
+      })
+      .catch((error: unknown) => {
+        toast.error("Could not delete", {
+          description: error instanceof Error ? error.message : "Please try again.",
+        });
+      });
+  };
+
+  const handleShare = () => {
+    const url = `${window.location.origin}/investigate?id=${encodeURIComponent(item.id)}`;
+    navigator.clipboard
+      ?.writeText(url)
+      .then(() => {
+        toast.success("Link copied", {
+          description: "Anyone with this link and access can open the investigation.",
+        });
+      })
+      .catch(() => {
+        toast.error("Copy failed", { description: "Clipboard access was denied." });
+      });
+  };
+
+  if (renaming) {
+    return (
+      <div className="syn-recent-item active" data-renaming="true">
+        <Pin className="syn-recent-dot size-3 shrink-0" aria-hidden="true" />
+        <input
+          ref={renameInputRef}
+          type="text"
+          defaultValue={item.question}
+          maxLength={120}
+          className="min-w-0 flex-1 border-0 bg-transparent p-0 text-[0.8125rem] text-foreground outline-none"
+          aria-label="Investigation title"
+          onKeyDown={(e) => {
+            if (e.key === "Enter") handleRename();
+            if (e.key === "Escape") setRenaming(false);
+          }}
+          onBlur={handleRename}
+        />
+      </div>
+    );
+  }
+
+  return (
+    <div
+      className={cn("syn-recent-item group", active && "active")}
+      data-menu-open={menuOpen ? "true" : undefined}
+      aria-current={active ? "true" : undefined}
+    >
+      <button
+        type="button"
+        className="flex min-w-0 flex-1 items-center gap-2 text-left"
+        title={item.question}
+        onClick={() => onOpen(item.id)}
+      >
+        <Pin
+          className={cn(
+            "syn-recent-dot size-3 shrink-0",
+            item.pinned && "rotate-45 text-[var(--syntra-orange)]",
+          )}
+          aria-hidden="true"
+        />
+        <span className="syn-recent-title">{item.question}</span>
+      </button>
+      <DropdownMenu open={menuOpen} onOpenChange={setMenuOpen}>
+        <DropdownMenuTrigger asChild>
+          <button
+            type="button"
+            className="flex size-5 shrink-0 items-center justify-center rounded-sm text-muted-foreground opacity-0 transition-opacity focus-visible:opacity-100 group-hover:opacity-100 data-[state=open]:opacity-100"
+            aria-label={`Actions for ${item.question}`}
+          >
+            <MoreHorizontal className="size-3.5" />
+          </button>
+        </DropdownMenuTrigger>
+        <DropdownMenuContent side="right" align="start" className="min-w-44">
+          <DropdownMenuItem onClick={handleShare}>
+            <Share className="size-4" />
+            Share
+          </DropdownMenuItem>
+          <DropdownMenuItem onClick={() => setRenaming(true)}>
+            <Pencil className="size-4" />
+            Rename
+          </DropdownMenuItem>
+          <DropdownMenuSeparator />
+          <DropdownMenuItem onClick={handlePin}>
+            {item.pinned ? <PinOff className="size-4" /> : <Pin className="size-4" />}
+            {item.pinned ? "Unpin" : "Pin"}
+          </DropdownMenuItem>
+          <DropdownMenuItem onClick={handleArchive}>
+            <Archive className="size-4" />
+            Archive
+          </DropdownMenuItem>
+          <DropdownMenuSeparator />
+          <DropdownMenuItem
+            onClick={handleDelete}
+            className="text-[var(--syntra-danger)] focus:text-[var(--syntra-danger)]"
+          >
+            <Trash2 className="size-4" />
+            Delete
+          </DropdownMenuItem>
+        </DropdownMenuContent>
+      </DropdownMenu>
+    </div>
+  );
+}
 
 /** Inner nav used by both the desktop sidebar and the mobile drawer. */
 function SidebarContent({
@@ -169,24 +379,17 @@ function SidebarContent({
           ) : (
             <div className="syn-recent-list" role="list" aria-label="Recent investigations">
               {recent.slice(0, RECENT_LIMIT).map((item) => (
-                <button
-                  key={item.id}
-                  type="button"
-                  role="listitem"
-                  className={cn(
-                    "syn-recent-item",
-                    item.id === activeInvestigationId && "active",
-                  )}
-                  title={item.question}
-                  aria-current={item.id === activeInvestigationId ? "true" : undefined}
-                  onClick={() => {
-                    onRestoreInvestigation(item.id);
-                    onNavigateAway();
-                  }}
-                >
-                  <Radar className="syn-recent-dot size-3 shrink-0" aria-hidden="true" />
-                  <span className="syn-recent-title">{item.question}</span>
-                </button>
+                <div key={item.id} role="listitem">
+                  <RecentItem
+                    item={item}
+                    active={item.id === activeInvestigationId}
+                    onOpen={(id) => {
+                      onRestoreInvestigation(id);
+                      onNavigateAway();
+                    }}
+                    onChanged={refreshRecent}
+                  />
+                </div>
               ))}
             </div>
           )}

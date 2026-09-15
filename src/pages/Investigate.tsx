@@ -1,5 +1,6 @@
 import { PlusCircle } from "lucide-react";
 import { useCallback, useEffect, useState } from "react";
+import { useSearchParams } from "react-router";
 import { InvestigationInput } from "@/components/InvestigationInput";
 import { WorkspacePage } from "@/components/WorkspacePage";
 import { NeutralBadge, StatusBadge } from "@/components/StatusBadge";
@@ -33,15 +34,26 @@ function formatTimestamp(ms: number): string {
 export default function Investigate({ locationState }: InvestigateProps) {
   const { phase, question, result, error, finishedAt, ask, restore, reset } = useInvestigation();
   const [draft, setDraft] = useState<string | undefined>(undefined);
+  const [searchParams, setSearchParams] = useSearchParams();
 
   const restoreId = locationState?.restoreId;
   const restoreNonce = locationState?.restoreNonce;
+  // Shared links carry ?id=<investigation id>.
+  const shareId = searchParams.get("id");
 
   useEffect(() => {
     if (restoreId) {
       void restore(restoreId);
     }
   }, [restoreId, restoreNonce, restore]);
+
+  useEffect(() => {
+    if (shareId) {
+      void restore(shareId);
+      // Consume the param so refresh/back behave predictably.
+      setSearchParams({}, { replace: true });
+    }
+  }, [shareId, restore, setSearchParams]);
 
   // Tell the shell which investigation is open so the sidebar Recent list can
   // highlight it; clears when the workspace resets or unmounts.

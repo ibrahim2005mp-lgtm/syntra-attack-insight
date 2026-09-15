@@ -63,3 +63,27 @@ export function clampDisplayText(text: unknown, max: number): string {
   if (typeof text !== "string") return "";
   return text.length > max ? text.slice(0, max) : text;
 }
+
+/**
+ * Validate a user-provided investigation title (rename). Same screening as
+ * questions but shorter; the backend re-validates independently.
+ */
+export function validateInvestigationTitle(raw: unknown): ValidationResult {
+  if (typeof raw !== "string") {
+    return { valid: false, error: "empty" };
+  }
+  const value = raw.trim().replace(/\s+/g, " ");
+  if (value.length === 0) {
+    return { valid: false, error: "empty" };
+  }
+  if (value.length > 120) {
+    return { valid: false, error: "too_long" };
+  }
+  if (CONTROL_AND_BRACKETS.test(value)) {
+    return { valid: false, error: "invalid_characters" };
+  }
+  if (SUSPICIOUS_PATTERNS.some((p) => p.test(value))) {
+    return { valid: false, error: "suspicious" };
+  }
+  return { valid: true, value };
+}

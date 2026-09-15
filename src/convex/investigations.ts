@@ -1,6 +1,7 @@
 import { getAuthUserId } from "@convex-dev/auth/server";
-import { mutation, query } from "./_generated/server";
+import { mutation, query, type MutationCtx } from "./_generated/server";
 import { v } from "convex/values";
+import type { Id } from "./_generated/dataModel";
 import type { InvestigationResult } from "../types/investigation";
 import {
   DOMAIN_MATCHERS,
@@ -118,19 +119,117 @@ export const listHistory = query({
     const userId = await getAuthUserId(ctx);
     if (userId === null) return [];
 
-    return await ctx.db
+    const rows = await ctx.db
       .query("investigations")
       .withIndex("by_user_created", (q) => q.eq("userId", userId))
       .order("desc")
-      .take(50)
-      .then((rows) =>
-        rows.map((row) => ({
-          id: row._id,
-          question: row.question,
-          createdAt: row.createdAt,
-          statusKind: row.statusKind,
-        })),
-      );
+      .take(200);
+
+    return rows
+      .filter((row) => row.archived !== true)
+      .sort((a, b) => {
+        const pa = a.pinned === true ? 1 : 0;
+        const pb = b.pinned === true ? 1 : 0;
+        if (pa !== pb) return pb - pa; // pinned first
+        return b.createdAt - a.createdAt; // newest first
+      })
+      .slice(0, 50)
+      .map((row) => ({
+        id: row._id,
+        question: row.title ?? row.question,
+        createdAt: row.createdAt,
+        statusKind: row.statusKind,
+        pinned: row.pinned === true,
+      }));
+  },
+});
+
+/**
+ * Server-side rename validation. Titles are shorter than questions and get
+ * the same character screening; rendering stays plain-text on the client.
+ */
+const MIN_TITLE_LENGTH = 1;
+const MAX_TITLE_LENGTH = 120;
+
+function validateTitleServerSide(raw: unknown): string {
+  if (typeof raw !== "string") {
+    throw new Error("Please enter a title.");
+  }
+  const value = raw.trim().replace(/\s+/g, " ");
+  if (value.length < MIN_TITLE_LENGTH) {
+    throw new Error("Please enter a title.");
+  }
+  if (value.length > MAX_TITLE_LENGTH) {
+    throw new Error("Titles are limited to 120 characters.");
+  }
+  if (INVALID_CHARS.test(value)) {
+    throw new Error("The title contains characters that are not supported.");
+  }
+  return value;
+}
+
+/** Load an investigation owned by the requesting user, or null. */
+async function getOwnedInvestigation(
+  ctx: MutationCtx,
+  id: Id<"investigations">,
+) {
+  const userId = await getAuthUserId(ctx);
+  if (userId === null) return null;
+  const doc = await ctx.db.get(id);
+  if (doc === null || doc.userId !== userId) return null;
+  return { doc, userId };
+}
+
+/** Rename a stored investigation (sidebar title). */
+export const renameInvestigation = mutation({
+  args: { id: v.id("investigations"), title: v.string() },
+  handler: async (ctx, args) => {
+    const owned = await getOwnedInvestigation(ctx, args.id);
+    if (owned === null) {
+      throw new Error("Investigation not found.");
+    }
+    const title = validateTitleServerSide(args.title);
+    await ctx.db.patch(args.id, { title });
+    return { id: args.id, title };
+  },
+});
+
+/** Toggle the pinned flag (pinned investigations sort first). */
+export const setInvestigationPinned = mutation({
+  args: { id: v.id("investigations"), pinned: v.boolean() },
+  handler: async (ctx, args) => {
+    const owned = await getOwnedInvestigation(ctx, args.id);
+    if (owned === null) {
+      throw new Error("Investigation not found.");
+    }
+    await ctx.db.patch(args.id, { pinned: args.pinned ? true : undefined });
+    return { id: args.id, pinned: args.pinned };
+  },
+});
+
+/** Toggle the archived flag (archived investigations leave the sidebar). */
+export const setInvestigationArchived = mutation({
+  args: { id: v.id("investigations"), archived: v.boolean() },
+  handler: async (ctx, args) => {
+    const owned = await getOwnedInvestigation(ctx, args.id);
+    if (owned === null) {
+      throw new Error("Investigation not found.");
+    }
+    await ctx.db.patch(args.id, { archived: args.archived ? true : undefined });
+    return { id: args.id, archived: args.archived };
+  },
+});
+
+/** Permanently remove an investigation. */
+export const deleteInvestigation = mutation({
+  args: { id: v.id("investigations") },
+  handler: async (ctx, args) => {
+    const owned = await getOwnedInvestigation(ctx, args.id);
+    if (owned === null) {
+      throw new Error("Investigation not found.");
+    }
+    await ctx.db.delete(args.id);
+    return { id: args.id };
   },
 });
 
