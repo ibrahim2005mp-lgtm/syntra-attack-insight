@@ -1,4 +1,4 @@
-import { Compass, RefreshCcw, ShieldX } from "lucide-react";
+import { Compass, RefreshCcw, ShieldX, Square } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import type { InvestigationResult } from "@/types/investigation";
 
@@ -7,7 +7,38 @@ import type { InvestigationResult } from "@/types/investigation";
  * indeterminate state — SYNTRA never fabricates technical progress it cannot
  * observe.
  */
-export function LoadingState({ question }: { question: string }) {
+export function LoadingState({
+  question,
+  compact = false,
+  onCancel,
+}: {
+  question: string;
+  compact?: boolean;
+  onCancel?: () => void;
+}) {
+  if (compact) {
+    return (
+      <section aria-live="polite" aria-busy="true" className="syn-card syn-sweep flex items-center gap-3 p-4">
+        <Compass className="size-4 shrink-0 text-[var(--syntra-orange)]" aria-hidden="true" />
+        <div className="min-w-0 flex-1">
+          <p className="truncate text-xs font-medium text-foreground">{question}</p>
+          <p className="mt-0.5 text-[10px] text-muted-foreground">
+            Searching sources · Connecting evidence · Validating relationships
+          </p>
+        </div>
+        {onCancel && (
+          <button
+            type="button"
+            onClick={onCancel}
+            className="inline-flex h-7 shrink-0 items-center gap-1.5 rounded-md border border-border px-2.5 text-[11px] font-medium text-muted-foreground transition-colors hover:text-foreground"
+          >
+            <Square className="size-3" aria-hidden="true" />
+            Stop
+          </button>
+        )}
+      </section>
+    );
+  }
   return (
     <section aria-live="polite" aria-busy="true" className="flex flex-col gap-4">
       <div className="syn-card syn-sweep p-4">

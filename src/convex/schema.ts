@@ -48,9 +48,17 @@ const schema = defineSchema(
       pinned: v.optional(v.boolean()),
       /** Archived investigations are hidden from the sidebar list. */
       archived: v.optional(v.boolean()),
+      /**
+       * Conversation thread id. Every investigation belongs to a thread:
+       * follow-up questions share the root investigation's id; the root's
+       * threadId equals its own document id. Legacy rows (absent field) are
+       * treated as single-question threads.
+       */
+      threadId: v.optional(v.string()),
     })
       .index("by_user_created", ["userId", "createdAt"])
-      .index("by_user_pinned", ["userId", "pinned"]),
+      .index("by_user_pinned", ["userId", "pinned"])
+      .index("by_thread_created", ["threadId", "createdAt"]),
   },
   {
     schemaValidation: false,

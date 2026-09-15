@@ -105,8 +105,34 @@ export type InvestigationResult =
   | { kind: "insufficient_evidence"; message: string }
   | { kind: "out_of_domain"; message: string };
 
+/** One question + answer exchange inside a conversation thread. */
+export interface Turn {
+  /** Investigation document id (one per question). */
+  id: string;
+  question: string;
+  createdAt: number;
+  result: InvestigationResult;
+}
+
+/**
+ * A conversation: one or more turns that share a thread id. Follow-up
+ * questions asked in the workspace append to the same thread instead of
+ * creating a new one.
+ */
+export interface Thread {
+  /** Root thread id — every turn shares it; also the sidebar entry key. */
+  threadId: string;
+  /** Id of the newest turn (what the sidebar entry represents). */
+  lastTurnId: string;
+  turns: Turn[];
+  createdAt: number;
+  finishedAt: number;
+}
+
 export interface Investigation {
   id: string;
+  /** Conversation thread this investigation belongs to. */
+  threadId: string;
   question: string;
   createdAt: number;
   result: InvestigationResult;
@@ -118,12 +144,21 @@ export interface Investigation {
   archived?: boolean;
 }
 
+/**
+ * Sidebar / History entry: represents one conversation thread by its newest
+ * turn, so follow-up questions never duplicate the entry.
+ */
 export interface HistoryItem {
+  /** Representative turn id (newest in the thread). */
   id: string;
+  /** Stable thread key — restoring uses this. */
+  threadId: string;
   question: string;
   createdAt: number;
   evidenceStatus: EvidenceStatus;
-  /** True when the user pinned this investigation. */
+  /** Number of turns in the conversation (>= 1). */
+  turnCount: number;
+  /** True when the user pinned this conversation. */
   pinned?: boolean;
 }
 

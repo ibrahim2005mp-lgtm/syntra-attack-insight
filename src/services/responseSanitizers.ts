@@ -18,6 +18,8 @@ import type {
   MitigationItem,
   Relationship,
   SourceRef,
+  Thread,
+  Turn,
 } from "@/types/investigation";
 
 const EVIDENCE_STATUSES: EvidenceStatus[] = ["confirmed", "supported", "unverified", "insufficient"];
@@ -188,8 +190,36 @@ export function sanitizeInvestigation(raw: unknown): Investigation | null {
   if (typeof i.id !== "string") return null;
   return {
     id: i.id,
+    threadId: typeof i.threadId === "string" && i.threadId.length > 0 ? i.threadId : i.id,
     question: clampDisplayText(i.question, 600),
     createdAt: typeof i.createdAt === "number" ? i.createdAt : Date.now(),
     result: sanitizeInvestigationResult(i.result),
+  };
+}
+
+/**
+ * Sanitize a conversation thread (ordered turns). Malformed turns are
+ * dropped; an empty thread collapses to null so the UI can show a notice.
+ */
+export function sanitizeThread(raw: unknown): Thread | null {
+  if (!Array.isArray(raw) || raw.length === 0) return null;
+  const turns: Turn[] = [];
+  for (const entry of raw) {
+    const turn = sanitizeInvestigation(entry);
+    if (turn !== null) {
+      turns.push({ id: turn.id, question: turn.question, createdAt: turn.createdAt, result: turn.result });
+    }
+  }
+  if (turns.length === 0) return null;
+  const threadId =
+    typeof (raw[0] as Record<string, unknown> | null)?.threadId === "string"
+      ? ((raw[0] as Record<string, unknown>).threadId as string)
+      : turns[0].id;
+  return {
+    threadId: threadId.length > 0 ? threadId : turns[0].id,
+    lastTurnId: turns[turns.length - 1].id,
+    turns,
+    createdAt: turns[0].createdAt,
+    finishedAt: turns[turns.length - 1].createdAt,
   };
 }

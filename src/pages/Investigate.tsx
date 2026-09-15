@@ -1,4 +1,4 @@
-import { PlusCircle } from "lucide-react";
+import { MessageSquarePlus } from "lucide-react";
 import { useCallback, useEffect, useState } from "react";
 import { useSearchParams } from "react-router";
 import { InvestigationInput } from "@/components/InvestigationInput";
@@ -8,6 +8,7 @@ import { ErrorState, LoadingState, NoticeState, SafetyResponse } from "@/compone
 import { InvestigationResultView } from "@/components/results/InvestigationResultView";
 import { useInvestigation } from "@/hooks/useInvestigation";
 import { DEMO_HEADING, DEMO_NOTE, DEMO_PROMPTS, type DemoPrompt } from "@/mock/demoPrompts";
+import type { Turn } from "@/types/investigation";
 
 interface InvestigateProps {
   /** Router location state carrying a history-restore request. */
@@ -28,17 +29,29 @@ function formatTimestamp(ms: number): string {
 }
 
 /**
- * Investigation workspace — SYNTRA's home base. The initial screen is the
- * composer only; results appear as structured, evidence-grounded reports.
+ * Investigation workspace — SYNTRA's home base and conversation surface.
+ * Every question asked while a conversation is open appends to that
+ * conversation; a new conversation starts only from the empty screen or via
+ * "New conversation".
  */
 export default function Investigate({ locationState }: InvestigateProps) {
-  const { phase, question, result, error, finishedAt, ask, restore, reset } = useInvestigation();
+  const {
+    phase,
+    thread,
+    pendingQuestion,
+    error,
+    ask,
+    retry,
+    restore,
+    reset,
+    cancel,
+  } = useInvestigation();
   const [draft, setDraft] = useState<string | undefined>(undefined);
   const [searchParams, setSearchParams] = useSearchParams();
 
   const restoreId = locationState?.restoreId;
   const restoreNonce = locationState?.restoreNonce;
-  // Shared links carry ?id=<investigation id>.
+  // Shared links carry ?id=<thread turn id> and restore the whole thread.
   const shareId = searchParams.get("id");
 
   useEffect(() => {
@@ -55,26 +68,37 @@ export default function Investigate({ locationState }: InvestigateProps) {
     }
   }, [shareId, restore, setSearchParams]);
 
-  // Tell the shell which investigation is open so the sidebar Recent list can
-  // highlight it; clears when the workspace resets or unmounts.
-  const activeId = result?.id ?? null;
+  // Tell the shell which conversation is open so the sidebar can highlight
+  // it; clears when the workspace resets or unmounts.
+  const activeThreadId = thread?.threadId ?? null;
   useEffect(() => {
     window.dispatchEvent(
-      new CustomEvent("syntra:active-investigation", { detail: activeId }),
+      new CustomEvent("syntra:active-thread", { detail: activeThreadId }),
     );
     return () => {
       window.dispatchEvent(
-        new CustomEvent("syntra:active-investigation", { detail: null }),
+        new CustomEvent("syntra:active-thread", { detail: null }),
       );
     };
-  }, [activeId]);
+  }, [activeThreadId]);
 
-  const handleNewInvestigation = useCallback(() => {
+  // The composer continues the open conversation.
+  const activeThreadIdForAsk = thread?.threadId;
+  const handleAsk = useCallback(
+    (question: string) => {
+      setDraft(undefined);
+      void ask(question, activeThreadIdForAsk);
+    },
+    [ask, activeThreadIdForAsk],
+  );
+
+  const handleNewConversation = useCallback(() => {
     reset();
     setDraft("");
   }, [reset]);
 
   const pending = phase === "loading";
+  const turns = thread?.turns ?? [];
 
   return (
     <WorkspacePage
@@ -84,11 +108,11 @@ export default function Investigate({ locationState }: InvestigateProps) {
         phase !== "idle" ? (
           <button
             type="button"
-            onClick={handleNewInvestigation}
+            onClick={handleNewConversation}
             className="syn-btn-primary inline-flex h-8 items-center gap-1.5 rounded-md bg-[var(--syntra-orange)] px-3 text-xs font-semibold tracking-wide text-[color-mix(in_oklab,var(--syntra-orange)_20%,black)]"
           >
-            <PlusCircle className="size-3.5" aria-hidden="true" />
-            New Investigation
+            <MessageSquarePlus className="size-3.5" aria-hidden="true" />
+            New conversation
           </button>
         ) : undefined
       }
@@ -101,66 +125,111 @@ export default function Investigate({ locationState }: InvestigateProps) {
             </h2>
             <p className="mt-2 max-w-xl text-sm leading-relaxed text-muted-foreground">
               Ask about a cybersecurity event, technique, campaign or vulnerability.
-              SYNTRA returns an evidence-grounded analysis — not speculation.
+              SYNTRA returns an evidence-grounded analysis — not speculation. Follow-up
+              questions continue the same conversation.
             </p>
           </div>
           <div className="w-full">
-            <InvestigationInput onSubmit={ask} pending={pending} draft={draft} />
+            <InvestigationInput onSubmit={handleAsk} pending={pending} draft={draft} />
           </div>
-          <DemoStrip onRun={ask} />
+          <DemoStrip onRun={handleAsk} />
         </div>
       )}
 
-      {phase === "loading" && (
+      {phase === "loading" && turns.length === 0 && (
         <div className="flex flex-col gap-6">
-          <InvestigationInput onSubmit={ask} onCancel={reset} pending draft={question} />
-          <LoadingState question={question} />
+          <LoadingState question={pendingQuestion} />
         </div>
       )}
 
-      {phase === "error" && (
+      {phase === "error" && turns.length === 0 && (
         <div className="flex flex-col gap-6">
-          <InvestigationInput onSubmit={ask} pending={pending} draft={draft} />
-          <ErrorState message={error ?? "The investigation could not be completed."} onRetry={() => ask(question)} />
+          <ErrorState message={error ?? "The investigation could not be completed."} onRetry={retry} />
         </div>
       )}
 
-      {phase === "done" && result && (
-        <div className="flex flex-col gap-6">
-          {/* Investigation header */}
-          <div className="syn-card p-4">
-            <div className="flex flex-wrap items-center gap-x-3 gap-y-2">
-              <p className="min-w-0 flex-1 text-sm font-medium leading-snug text-foreground">{question}</p>
-              {result.result.kind === "report" ? (
-                <StatusBadge status={result.result.evidenceStatus} />
-              ) : result.result.kind === "safety" ? (
-                <StatusBadge status="insufficient" refused />
-              ) : (
-                <NeutralBadge>No Result</NeutralBadge>
-              )}
-              <span className="syn-mono text-[11px] text-muted-foreground">
-                {formatTimestamp(finishedAt ?? result.createdAt)}
-              </span>
-            </div>
-          </div>
+      {(phase === "done" || ((phase === "loading" || phase === "error") && turns.length > 0)) && (
+        <div className="flex flex-col gap-8 pb-2">
+          {turns.map((turn) => (
+            <TurnView key={turn.id} turn={turn} onDraftQuestion={setDraft} />
+          ))}
 
-          {result.result.kind === "report" && (
-            <InvestigationResultView
-              report={result.result}
-              callbacks={{ onCopyTechniqueId: () => undefined, onDraftQuestion: setDraft }}
-            />
+          {phase === "loading" && (
+            <LoadingState question={pendingQuestion} compact onCancel={cancel} />
           )}
-          {result.result.kind === "safety" && <SafetyResponse result={result.result} onAlternative={setDraft} />}
-          {(result.result.kind === "no_results" ||
-            result.result.kind === "insufficient_evidence" ||
-            result.result.kind === "out_of_domain") && <NoticeState message={result.result.message} />}
+
+          {phase === "error" && (
+            <ErrorState message={error ?? "The investigation could not be completed."} onRetry={retry} />
+          )}
 
           <div className="pb-2">
-            <InvestigationInput onSubmit={ask} pending={pending} draft={draft} />
+            <InvestigationInput
+              onSubmit={handleAsk}
+              pending={pending}
+              draft={draft}
+            />
+            {turns.length > 0 && !pending && (
+              <p className="mt-2 text-center text-[10px] text-muted-foreground">
+                Exchange {turns.length + 1} continues this conversation · start a new
+                one with “New conversation”
+              </p>
+            )}
           </div>
         </div>
       )}
+
+      {phase === "done" && thread && turns.length === 0 && (
+        <NoticeState message="This conversation has no stored exchanges." />
+      )}
     </WorkspacePage>
+  );
+}
+
+/**
+ * One exchange inside the conversation: the question header with its
+ * evidence verdict, followed by the structured result.
+ */
+function TurnView({
+  turn,
+  onDraftQuestion,
+}: {
+  turn: Turn;
+  onDraftQuestion: (question: string) => void;
+}) {
+  const result = turn.result;
+  return (
+    <section className="flex flex-col gap-4" aria-label={`Exchange: ${turn.question}`}>
+      <div className="syn-card p-4">
+        <div className="flex flex-wrap items-center gap-x-3 gap-y-2">
+          <p className="min-w-0 flex-1 text-sm font-medium leading-snug text-foreground">
+            {turn.question}
+          </p>
+          {result.kind === "report" ? (
+            <StatusBadge status={result.evidenceStatus} />
+          ) : result.kind === "safety" ? (
+            <StatusBadge status="insufficient" refused />
+          ) : (
+            <NeutralBadge>No Result</NeutralBadge>
+          )}
+          <span className="syn-mono text-[11px] text-muted-foreground">
+            {formatTimestamp(turn.createdAt)}
+          </span>
+        </div>
+      </div>
+
+      {result.kind === "report" && (
+        <InvestigationResultView
+          report={result}
+          callbacks={{ onCopyTechniqueId: () => undefined, onDraftQuestion: onDraftQuestion }}
+        />
+      )}
+      {result.kind === "safety" && (
+        <SafetyResponse result={result} onAlternative={onDraftQuestion} />
+      )}
+      {(result.kind === "no_results" ||
+        result.kind === "insufficient_evidence" ||
+        result.kind === "out_of_domain") && <NoticeState message={result.message} />}
+    </section>
   );
 }
 

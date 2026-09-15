@@ -72,7 +72,14 @@ function statusKindOf(result: InvestigationResult): string {
 }
 
 export const createInvestigation = mutation({
-  args: { question: v.string() },
+  args: {
+    question: v.string(),
+    /**
+     * Optional thread id: pass the root investigation's id to append a
+     * follow-up turn to an existing conversation. Omitted → new thread.
+     */
+    threadId: v.optional(v.string()),
+  },
   handler: async (ctx, args) => {
     const userId = await getAuthUserId(ctx);
     if (userId === null) {
@@ -83,18 +90,38 @@ export const createInvestigation = mutation({
     const result = buildInvestigationResult(question);
     const createdAt = Date.now();
 
+    // Resolve thread membership server-side: never trust the client to
+    // describe the shape of its own conversation history.
+    let threadId: string;
+    if (typeof args.threadId === "string" && args.threadId.length > 0) {
+      const root = await ctx.db.get(args.threadId as Id<"investigations">);
+      if (root === null || root.userId !== userId) {
+        throw new Error("The conversation could not be extended.");
+      }
+      threadId = root.threadId ?? root._id;
+    } else {
+      threadId = ""; // patched to the new document's own id right after insert
+    }
+
     const id = await ctx.db.insert("investigations", {
       userId,
       question,
       createdAt,
       result,
       statusKind: statusKindOf(result),
+      threadId: threadId || undefined,
     });
+    if (!threadId) {
+      await ctx.db.patch(id, { threadId: id });
+    }
 
-    return { id, question, createdAt, result };
+    return { id, threadId: threadId || id, question, createdAt, result };
   },
 });
 
+/**
+ * Load one investigation document (a single conversation turn).
+ */
 export const getInvestigation = query({
   args: { id: v.id("investigations") },
   handler: async (ctx, args) => {
@@ -106,10 +133,43 @@ export const getInvestigation = query({
 
     return {
       id: doc._id,
+      threadId: doc.threadId ?? doc._id,
       question: doc.question,
       createdAt: doc.createdAt,
       result: doc.result as InvestigationResult,
     };
+  },
+});
+
+/**
+ * Load a full conversation thread, oldest turn first. Any turn id works —
+ * the threadId always points at the root document.
+ */
+export const getThread = query({
+  args: { threadId: v.id("investigations") },
+  handler: async (ctx, args) => {
+    const userId = await getAuthUserId(ctx);
+    if (userId === null) return [];
+
+    const root = await ctx.db.get(args.threadId);
+    if (root === null || root.userId !== userId) return [];
+
+    const threadRootId = root.threadId ?? root._id;
+    const turns = await ctx.db
+      .query("investigations")
+      .withIndex("by_thread_created", (q) =>
+        q.eq("threadId", threadRootId).gte("createdAt", 0),
+      )
+      .order("asc")
+      .take(60);
+
+    return turns.map((doc) => ({
+      id: doc._id,
+      threadId: doc.threadId ?? doc._id,
+      question: doc.question,
+      createdAt: doc.createdAt,
+      result: doc.result as InvestigationResult,
+    }));
   },
 });
 
@@ -136,6 +196,7 @@ export const listHistory = query({
       .slice(0, 50)
       .map((row) => ({
         id: row._id,
+        threadId: row.threadId ?? row._id,
         question: row.title ?? row.question,
         createdAt: row.createdAt,
         statusKind: row.statusKind,
@@ -180,8 +241,66 @@ async function getOwnedInvestigation(
   return { doc, userId };
 }
 
-/** Rename a stored investigation (sidebar title). */
-export const renameInvestigation = mutation({
+/**
+ * Sidebar/list grouping helpers: a thread appears once, represented by its
+ * newest turn. listHistory above still returns raw turns for the History
+ * page; listThreads folds them into conversation entries.
+ */
+export const listThreads = query({
+  args: {},
+  handler: async (ctx) => {
+    const userId = await getAuthUserId(ctx);
+    if (userId === null) return [];
+
+    const rows = await ctx.db
+      .query("investigations")
+      .withIndex("by_user_created", (q) => q.eq("userId", userId))
+      .order("desc")
+      .take(400);
+
+    const threads = new Map<string, {
+      id: string;
+      threadId: string;
+      question: string;
+      title?: string;
+      pinned?: boolean;
+      createdAt: number;
+      turnCount: number;
+      statusKind: string;
+    }>();
+    for (const row of rows) {
+      if (row.archived === true) continue;
+      const key = row.threadId ?? row._id;
+      const existing = threads.get(key);
+      if (existing) {
+        existing.turnCount += 1;
+        continue; // rows arrive newest-first; keep the newest as representative
+      }
+      threads.set(key, {
+        id: row._id,
+        threadId: key,
+        question: row.title ?? row.question,
+        title: row.title,
+        pinned: row.pinned,
+        createdAt: row.createdAt,
+        turnCount: 1,
+        statusKind: row.statusKind,
+      });
+    }
+
+    return [...threads.values()]
+      .sort((a, b) => {
+        const pa = a.pinned === true ? 1 : 0;
+        const pb = b.pinned === true ? 1 : 0;
+        if (pa !== pb) return pb - pa;
+        return b.createdAt - a.createdAt;
+      })
+      .slice(0, 50);
+  },
+});
+
+/** Rename a conversation thread (applies to every turn). */
+export const renameThread = mutation({
   args: { id: v.id("investigations"), title: v.string() },
   handler: async (ctx, args) => {
     const owned = await getOwnedInvestigation(ctx, args.id);
@@ -189,47 +308,83 @@ export const renameInvestigation = mutation({
       throw new Error("Investigation not found.");
     }
     const title = validateTitleServerSide(args.title);
-    await ctx.db.patch(args.id, { title });
-    return { id: args.id, title };
+    const rootId = owned.doc.threadId ?? owned.doc._id;
+    const turns = await ctx.db
+      .query("investigations")
+      .withIndex("by_thread_created", (q) =>
+        q.eq("threadId", rootId).gte("createdAt", 0),
+      )
+      .collect();
+    for (const turn of turns) {
+      await ctx.db.patch(turn._id, { title });
+    }
+    return { id: rootId, title };
   },
 });
 
-/** Toggle the pinned flag (pinned investigations sort first). */
-export const setInvestigationPinned = mutation({
+/** Toggle the pinned flag for a whole conversation (pinned sort first). */
+export const setThreadPinned = mutation({
   args: { id: v.id("investigations"), pinned: v.boolean() },
   handler: async (ctx, args) => {
     const owned = await getOwnedInvestigation(ctx, args.id);
     if (owned === null) {
       throw new Error("Investigation not found.");
     }
-    await ctx.db.patch(args.id, { pinned: args.pinned ? true : undefined });
-    return { id: args.id, pinned: args.pinned };
+    const rootId = owned.doc.threadId ?? owned.doc._id;
+    const turns = await ctx.db
+      .query("investigations")
+      .withIndex("by_thread_created", (q) =>
+        q.eq("threadId", rootId).gte("createdAt", 0),
+      )
+      .collect();
+    for (const turn of turns) {
+      await ctx.db.patch(turn._id, { pinned: args.pinned ? true : undefined });
+    }
+    return { id: rootId, pinned: args.pinned };
   },
 });
 
-/** Toggle the archived flag (archived investigations leave the sidebar). */
-export const setInvestigationArchived = mutation({
+/** Archive or unarchive a whole conversation (hides it from the sidebar). */
+export const setThreadArchived = mutation({
   args: { id: v.id("investigations"), archived: v.boolean() },
   handler: async (ctx, args) => {
     const owned = await getOwnedInvestigation(ctx, args.id);
     if (owned === null) {
       throw new Error("Investigation not found.");
     }
-    await ctx.db.patch(args.id, { archived: args.archived ? true : undefined });
-    return { id: args.id, archived: args.archived };
+    const rootId = owned.doc.threadId ?? owned.doc._id;
+    const turns = await ctx.db
+      .query("investigations")
+      .withIndex("by_thread_created", (q) =>
+        q.eq("threadId", rootId).gte("createdAt", 0),
+      )
+      .collect();
+    for (const turn of turns) {
+      await ctx.db.patch(turn._id, { archived: args.archived ? true : undefined });
+    }
+    return { id: rootId, archived: args.archived };
   },
 });
 
-/** Permanently remove an investigation. */
-export const deleteInvestigation = mutation({
+/** Permanently remove a whole conversation, every turn included. */
+export const deleteThread = mutation({
   args: { id: v.id("investigations") },
   handler: async (ctx, args) => {
     const owned = await getOwnedInvestigation(ctx, args.id);
     if (owned === null) {
       throw new Error("Investigation not found.");
     }
-    await ctx.db.delete(args.id);
-    return { id: args.id };
+    const rootId = owned.doc.threadId ?? owned.doc._id;
+    const turns = await ctx.db
+      .query("investigations")
+      .withIndex("by_thread_created", (q) =>
+        q.eq("threadId", rootId).gte("createdAt", 0),
+      )
+      .collect();
+    for (const turn of turns) {
+      await ctx.db.delete(turn._id);
+    }
+    return { id: rootId };
   },
 });
 

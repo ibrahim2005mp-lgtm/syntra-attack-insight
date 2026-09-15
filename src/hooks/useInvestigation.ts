@@ -1,22 +1,26 @@
 import { useCallback, useRef, useState } from "react";
 import { toast } from "sonner";
-import { getInvestigation, investigateQuestion } from "@/services/api";
-import type { Investigation } from "@/types/investigation";
+import { getThread, investigateQuestion } from "@/services/api";
+import type { Thread, Turn } from "@/types/investigation";
 
 export type InvestigationPhase = "idle" | "loading" | "done" | "error";
 
-interface InvestigationState {
+interface WorkspaceState {
   phase: InvestigationPhase;
-  question: string;
-  result: Investigation | null;
+  /** The conversation being viewed. */
+  thread: Thread | null;
+  /** Question currently being investigated (pending turn). */
+  pendingQuestion: string;
   error: string | null;
   finishedAt: number | null;
+  /** Id of the turn that just errored, so retry targets the right thread. */
+  errorTurnThreadId: string | null;
 }
 
 /** Friendly verdict line for the completion toast. */
-function verdictOf(result: Investigation): string {
-  if (result.result.kind === "report") {
-    switch (result.result.evidenceStatus) {
+function verdictOf(turn: Turn): string {
+  if (turn.result.kind === "report") {
+    switch (turn.result.evidenceStatus) {
       case "confirmed":
         return "All chain stages are confirmed by sources.";
       case "supported":
@@ -27,120 +31,202 @@ function verdictOf(result: Investigation): string {
         return "Evidence is insufficient to confirm the chain.";
     }
   }
-  if (result.result.kind === "safety") {
+  if (turn.result.kind === "safety") {
     return "Request not supported — safe alternatives suggested.";
   }
-  if (result.result.kind === "no_results") {
+  if (turn.result.kind === "no_results") {
     return "No relevant evidence was found.";
   }
-  if (result.result.kind === "out_of_domain") {
+  if (turn.result.kind === "out_of_domain") {
     return "Question is outside the cybersecurity scope.";
   }
   return "Available evidence is not sufficient.";
 }
 
-/**
- * Owns the current investigation lifecycle. All backend access goes through
- * services/api.ts; components never talk to Convex directly. Outcomes are
- * announced through toasts so the UI visibly responds to every action.
- */
-export function useInvestigation() {
-  const [state, setState] = useState<InvestigationState>({
+function emptyState(): WorkspaceState {
+  return {
     phase: "idle",
-    question: "",
-    result: null,
+    thread: null,
+    pendingQuestion: "",
     error: null,
     finishedAt: null,
-  });
+    errorTurnThreadId: null,
+  };
+}
+
+/**
+ * Owns the current conversation lifecycle. Follow-up questions asked while a
+ * thread is open append to that thread — a new conversation is only created
+ * from the empty state or via "New conversation". All backend access goes
+ * through services/api.ts; outcomes are announced through toasts.
+ */
+export function useInvestigation() {
+  const [state, setState] = useState<WorkspaceState>(emptyState);
   const runIdRef = useRef(0);
 
-  const ask = useCallback(async (question: string) => {
-    const runId = ++runIdRef.current;
-    setState({ phase: "loading", question, result: null, error: null, finishedAt: null });
-    toast("Investigation started", { description: "Searching sources for supporting evidence." });
-
-    try {
-      const investigation = await investigateQuestion(question);
-      if (runIdRef.current !== runId) return; // a newer request superseded this one
+  const refreshThread = useCallback(async (threadId: string, runId: number, justAsked: boolean) => {
+    const thread = await getThread(threadId);
+    if (runIdRef.current !== runId) return;
+    if (thread === null) {
       setState({
-        phase: "done",
-        question,
-        result: investigation,
-        error: null,
-        finishedAt: Date.now(),
-      });
-      // Let the shell (sidebar Recent list) know a stored investigation exists.
-      window.dispatchEvent(
-        new CustomEvent("syntra:history-updated", { detail: investigation.id }),
-      );
-      toast.success("Investigation complete", {
-        description: verdictOf(investigation),
-      });
-    } catch (error) {
-      if (runIdRef.current !== runId) return;
-      const message =
-        error instanceof Error
-          ? error.message
-          : "The investigation could not be completed. Please try again.";
-      setState({
+        ...emptyState(),
         phase: "error",
-        question,
-        result: null,
-        error: message,
-        finishedAt: Date.now(),
+        error: "That conversation could not be loaded.",
       });
-      toast.error("Investigation failed", { description: message });
-    }
-  }, []);
-
-  const restore = useCallback(async (id: string) => {
-    const runId = ++runIdRef.current;
-    setState((prev) => ({ ...prev, phase: "loading", result: null, error: null }));
-    try {
-      const investigation = await getInvestigation(id);
-      if (runIdRef.current !== runId) return;
-      if (investigation === null) {
-        setState({
-          phase: "error",
-          question: "",
-          result: null,
-          error: "That investigation could not be restored.",
-          finishedAt: null,
-        });
-        toast.error("Could not restore investigation", {
-          description: "The record may have been removed.",
-        });
-        return;
-      }
-      setState({
-        phase: "done",
-        question: investigation.question,
-        result: investigation,
-        error: null,
-        finishedAt: investigation.createdAt,
-      });
-      toast("Investigation restored", {
-        description: "Showing the stored result from your history.",
-      });
-    } catch {
-      if (runIdRef.current !== runId) return;
-      setState({
-        phase: "error",
-        question: "",
-        result: null,
-        error: "That investigation could not be restored.",
-        finishedAt: null,
-      });
-      toast.error("Could not restore investigation", {
+      toast.error("Could not load conversation", {
         description: "The record may have been removed.",
       });
+      return;
+    }
+    setState({
+      phase: "done",
+      thread,
+      pendingQuestion: "",
+      error: null,
+      finishedAt: Date.now(),
+      errorTurnThreadId: null,
+    });
+    // Let the shell (sidebar list) know a thread changed.
+    window.dispatchEvent(
+      new CustomEvent("syntra:history-updated", { detail: thread.threadId }),
+    );
+    if (justAsked) {
+      const last = thread.turns[thread.turns.length - 1];
+      if (last) {
+        toast.success("Investigation complete", { description: verdictOf(last) });
+      }
     }
   }, []);
 
+  /**
+   * Ask a question. When `threadId` is provided the exchange is appended to
+   * that conversation; otherwise it opens a new one.
+   */
+  const ask = useCallback(
+    async (question: string, threadId?: string) => {
+      const runId = ++runIdRef.current;
+      const knownThread = threadId ? state.thread?.threadId === threadId : false;
+      setState((prev) => ({
+        ...prev,
+        phase: "loading",
+        pendingQuestion: question,
+        error: null,
+        errorTurnThreadId: threadId ?? null,
+        // Keep the open thread visible while the follow-up runs.
+        thread: threadId && !knownThread ? prev.thread : prev.thread,
+      }));
+      toast("Investigation started", {
+        description: "Searching sources for supporting evidence.",
+      });
+
+      try {
+        const turn = await investigateQuestion(question, threadId);
+        if (runIdRef.current !== runId) return;
+        await refreshThread(turn.threadId, runId, true);
+      } catch (error) {
+        if (runIdRef.current !== runId) return;
+        const message =
+          error instanceof Error
+            ? error.message
+            : "The investigation could not be completed. Please try again.";
+        setState((prev) => ({
+          ...prev,
+          phase: "error",
+          pendingQuestion: question,
+          error: message,
+          errorTurnThreadId: threadId ?? null,
+        }));
+        toast.error("Investigation failed", { description: message });
+      }
+    },
+    [refreshThread, state.thread?.threadId],
+  );
+
+  /** Retry the last failed question in its original conversation. */
+  const pendingRetryQuestion = state.pendingQuestion;
+  const pendingRetryThreadId = state.errorTurnThreadId;
+  const retry = useCallback(() => {
+    if (pendingRetryQuestion) void ask(pendingRetryQuestion, pendingRetryThreadId ?? undefined);
+  }, [ask, pendingRetryQuestion, pendingRetryThreadId]);
+
+  /** Open a stored conversation (sidebar / history / shared link). */
+  const restore = useCallback(
+    async (id: string) => {
+      const runId = ++runIdRef.current;
+      setState((prev) => ({ ...prev, phase: "loading", pendingQuestion: "", error: null }));
+      try {
+        const thread = await getThread(id);
+        if (runIdRef.current !== runId) return;
+        if (thread === null) {
+          setState({
+            ...emptyState(),
+            phase: "error",
+            error: "That conversation could not be restored.",
+          });
+          toast.error("Could not restore conversation", {
+            description: "The record may have been removed.",
+          });
+          return;
+        }
+        setState({
+          phase: "done",
+          thread,
+          pendingQuestion: "",
+          error: null,
+          finishedAt: thread.finishedAt,
+          errorTurnThreadId: null,
+        });
+        toast("Conversation restored", {
+          description:
+            thread.turns.length > 1
+              ? `Showing all ${thread.turns.length} exchanges in this conversation.`
+              : "Showing the stored result from your history.",
+        });
+      } catch {
+        if (runIdRef.current !== runId) return;
+        setState({
+          ...emptyState(),
+          phase: "error",
+          error: "That conversation could not be restored.",
+        });
+        toast.error("Could not restore conversation", {
+          description: "The record may have been removed.",
+        });
+      }
+    },
+    [],
+  );
+
+  /** Leave the conversation view entirely (empty workspace). */
   const reset = useCallback(() => {
     runIdRef.current += 1;
-    setState({ phase: "idle", question: "", result: null, error: null, finishedAt: null });
+    setState(emptyState());
   }, []);
 
-  return { ...state, ask, restore, reset };
+  /**
+   * Abort the in-flight run without discarding the conversation: turns
+   * already stored stay on screen and the composer becomes usable again.
+   */
+  const cancel = useCallback(() => {
+    runIdRef.current += 1;
+    setState((prev) => {
+      if (prev.thread === null) return emptyState();
+      return {
+        ...prev,
+        phase: "done",
+        pendingQuestion: "",
+        error: null,
+        errorTurnThreadId: null,
+      };
+    });
+  }, []);
+
+  return {
+    ...state,
+    ask,
+    retry,
+    restore,
+    reset,
+    cancel,
+  };
 }

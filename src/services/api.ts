@@ -12,6 +12,10 @@
  * Every payload passes through the frontend security layer before it leaves
  * the browser, and every response is sanitized before it is handed to the UI
  * (backend/LLM output is treated as untrusted data on both transports).
+ *
+ * Conversations: a question is either the start of a new thread or a
+ * follow-up inside an existing one (pass `threadId`). The client never
+ * fabricates thread membership — the backend resolves it.
  */
 import { api } from "@/convex/_generated/api";
 import type { Id } from "@/convex/_generated/dataModel";
@@ -20,45 +24,50 @@ import {
   validateInvestigationQuestion,
   validateInvestigationTitle,
 } from "@/security/inputValidation";
-import { sanitizeInvestigation, sanitizeStatus } from "./responseSanitizers";
+import { sanitizeInvestigation, sanitizeThread } from "./responseSanitizers";
 import type {
   HistoryItem,
   Investigation,
+  Thread,
 } from "@/types/investigation";
 import { mapApiError } from "./apiErrors";
 import { isFakeApiEnabled } from "./apiMode";
 import {
   fakeApiStatus,
-  fakeDeleteInvestigation,
+  fakeDeleteThread,
   fakeGetHistory,
-  fakeGetInvestigation,
+  fakeGetThread,
   fakeInvestigateQuestion,
-  fakeRenameInvestigation,
-  fakeSetInvestigationArchived,
-  fakeSetInvestigationPinned,
+  fakeRenameThread,
+  fakeSetThreadArchived,
+  fakeSetThreadPinned,
 } from "./fakeApi";
 
 /** Narrowly-typed accessor for the generated Convex API module. */
 function convexApi() {
   return (api as unknown as {
     investigations: {
-      createInvestigation: (args: { question: string }) => Promise<unknown>;
-      getInvestigation: (args: { id: Id<"investigations"> }) => Promise<unknown>;
-      listHistory: (args: Record<string, never>) => Promise<unknown>;
+      createInvestigation: (args: { question: string; threadId?: string }) => Promise<unknown>;
+      getThread: (args: { threadId: Id<"investigations"> }) => Promise<unknown>;
+      listThreads: (args: Record<string, never>) => Promise<unknown>;
       apiStatus: (args: Record<string, never>) => Promise<unknown>;
-      renameInvestigation: (args: { id: Id<"investigations">; title: string }) => Promise<unknown>;
-      setInvestigationPinned: (args: { id: Id<"investigations">; pinned: boolean }) => Promise<unknown>;
-      setInvestigationArchived: (args: { id: Id<"investigations">; archived: boolean }) => Promise<unknown>;
-      deleteInvestigation: (args: { id: Id<"investigations"> }) => Promise<unknown>;
+      renameThread: (args: { id: Id<"investigations">; title: string }) => Promise<unknown>;
+      setThreadPinned: (args: { id: Id<"investigations">; pinned: boolean }) => Promise<unknown>;
+      setThreadArchived: (args: { id: Id<"investigations">; archived: boolean }) => Promise<unknown>;
+      deleteThread: (args: { id: Id<"investigations"> }) => Promise<unknown>;
     };
   }).investigations;
 }
 
 /**
  * Run an investigation. Validates the question through the frontend security
- * layer before sending; the backend re-validates independently.
+ * layer before sending; the backend re-validates independently. Pass
+ * `threadId` to append the question to an existing conversation.
  */
-export async function investigateQuestion(question: string): Promise<Investigation> {
+export async function investigateQuestion(
+  question: string,
+  threadId?: string,
+): Promise<Investigation> {
   const validation = validateInvestigationQuestion(question);
   if (!validation.valid) {
     const messages: Record<string, string> = {
@@ -74,12 +83,17 @@ export async function investigateQuestion(question: string): Promise<Investigati
   }
 
   const cleaned = validation.value!;
+  const continuation =
+    typeof threadId === "string" && threadId.length > 0 ? threadId : undefined;
 
   try {
     if (isFakeApiEnabled()) {
-      return await fakeInvestigateQuestion(cleaned);
+      return await fakeInvestigateQuestion(cleaned, continuation);
     }
-    const raw = await convexApi().createInvestigation({ question: cleaned });
+    const raw = await convexApi().createInvestigation({
+      question: cleaned,
+      threadId: continuation,
+    });
     const investigation = sanitizeInvestigation(raw);
     if (investigation === null) {
       throw new Error("temporary");
@@ -90,14 +104,17 @@ export async function investigateQuestion(question: string): Promise<Investigati
   }
 }
 
-/** Restore a stored investigation by id (history navigation). */
-export async function getInvestigation(id: string): Promise<Investigation | null> {
+/**
+ * Load a full conversation thread (every turn, oldest first). Any turn id
+ * works — the backend resolves it to the thread root.
+ */
+export async function getThread(threadId: string): Promise<Thread | null> {
   if (isFakeApiEnabled()) {
-    return fakeGetInvestigation(id);
+    return fakeGetThread(threadId);
   }
   try {
-    const raw = await convexApi().getInvestigation({ id: id as Id<"investigations"> });
-    return sanitizeInvestigation(raw);
+    const raw = await convexApi().getThread({ threadId: threadId as Id<"investigations"> });
+    return sanitizeThread(raw);
   } catch {
     // Malformed ids or missing records degrade to "not found", not errors.
     return null;
@@ -105,10 +122,10 @@ export async function getInvestigation(id: string): Promise<Investigation | null
 }
 
 /**
- * Rename a stored investigation. Validates through the frontend security
+ * Rename a conversation thread. Validates through the frontend security
  * layer first; the backend re-validates independently.
  */
-export async function renameInvestigation(id: string, title: string): Promise<string> {
+export async function renameThread(id: string, title: string): Promise<string> {
   const validation = validateInvestigationTitle(title);
   if (!validation.valid || validation.value === undefined) {
     const messages: Record<string, string> = {
@@ -123,11 +140,11 @@ export async function renameInvestigation(id: string, title: string): Promise<st
     );
   }
   if (isFakeApiEnabled()) {
-    await fakeRenameInvestigation(id, validation.value);
+    await fakeRenameThread(id, validation.value);
     return validation.value;
   }
   try {
-    await convexApi().renameInvestigation({
+    await convexApi().renameThread({
       id: id as Id<"investigations">,
       title: validation.value,
     });
@@ -137,25 +154,25 @@ export async function renameInvestigation(id: string, title: string): Promise<st
   }
 }
 
-export async function setInvestigationPinned(id: string, pinned: boolean): Promise<void> {
+export async function setThreadPinned(id: string, pinned: boolean): Promise<void> {
   if (isFakeApiEnabled()) {
-    await fakeSetInvestigationPinned(id, pinned);
+    await fakeSetThreadPinned(id, pinned);
     return;
   }
   try {
-    await convexApi().setInvestigationPinned({ id: id as Id<"investigations">, pinned });
+    await convexApi().setThreadPinned({ id: id as Id<"investigations">, pinned });
   } catch (error) {
     throw mapApiError(error);
   }
 }
 
-export async function setInvestigationArchived(id: string, archived: boolean): Promise<void> {
+export async function setThreadArchived(id: string, archived: boolean): Promise<void> {
   if (isFakeApiEnabled()) {
-    await fakeSetInvestigationArchived(id, archived);
+    await fakeSetThreadArchived(id, archived);
     return;
   }
   try {
-    await convexApi().setInvestigationArchived({
+    await convexApi().setThreadArchived({
       id: id as Id<"investigations">,
       archived,
     });
@@ -164,24 +181,28 @@ export async function setInvestigationArchived(id: string, archived: boolean): P
   }
 }
 
-export async function deleteInvestigation(id: string): Promise<void> {
+export async function deleteThread(id: string): Promise<void> {
   if (isFakeApiEnabled()) {
-    await fakeDeleteInvestigation(id);
+    await fakeDeleteThread(id);
     return;
   }
   try {
-    await convexApi().deleteInvestigation({ id: id as Id<"investigations"> });
+    await convexApi().deleteThread({ id: id as Id<"investigations"> });
   } catch (error) {
     throw mapApiError(error);
   }
 }
 
+/**
+ * Sidebar list: one entry per conversation thread, represented by its newest
+ * turn. Follow-up questions update the existing entry instead of adding one.
+ */
 export async function getHistory(): Promise<HistoryItem[]> {
   if (isFakeApiEnabled()) {
     return fakeGetHistory();
   }
   try {
-    const rows = await convexApi().listHistory({});
+    const rows = await convexApi().listThreads({});
     if (!Array.isArray(rows)) return [];
     return rows
       .map((row): HistoryItem | null => {
@@ -190,10 +211,12 @@ export async function getHistory(): Promise<HistoryItem[]> {
         if (typeof r.id !== "string" || typeof r.question !== "string") return null;
         return {
           id: r.id,
+          threadId: typeof r.threadId === "string" ? r.threadId : r.id,
           question: clampDisplayText(r.question, 600),
           createdAt: typeof r.createdAt === "number" ? r.createdAt : 0,
           evidenceStatus:
-            r.statusKind === "refused" ? "insufficient" : sanitizeStatus(r.statusKind),
+            r.statusKind === "refused" ? "insufficient" : sanitizeThreadStatus(r.statusKind),
+          turnCount: typeof r.turnCount === "number" ? r.turnCount : 1,
           pinned: r.pinned === true,
         };
       })
@@ -201,6 +224,20 @@ export async function getHistory(): Promise<HistoryItem[]> {
       .slice(0, 50);
   } catch {
     return [];
+  }
+}
+
+/** Coarse status → evidence status for list rendering. */
+function sanitizeThreadStatus(value: unknown) {
+  switch (value) {
+    case "confirmed":
+      return "confirmed" as const;
+    case "supported":
+      return "supported" as const;
+    case "unverified":
+      return "unverified" as const;
+    default:
+      return "insufficient" as const;
   }
 }
 

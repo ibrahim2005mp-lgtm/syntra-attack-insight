@@ -5,7 +5,7 @@
  * through the same pipeline), but adds:
  *  - simulated network latency (so loading states are observable)
  *  - deterministic failure triggers for error-state testing
- *  - an in-memory per-session history
+ *  - an in-memory per-session thread store
  *
  * Failure triggers inside a question:
  *  - "fail" or "error" → temporary backend failure
@@ -21,14 +21,15 @@ import type {
   HistoryItem,
   Investigation,
   InvestigationResult,
+  Thread,
 } from "@/types/investigation";
-import { sanitizeInvestigation } from "./responseSanitizers";
+import { sanitizeInvestigation, sanitizeThread } from "./responseSanitizers";
 
-/** Session-scoped history (never persisted — demo data only). */
-const historyStore: Investigation[] = [];
+/** Session-scoped thread store (never persisted — demo data only). */
+const threadStore: Investigation[] = [];
 let idCounter = 0;
 
-const HISTORY_LIMIT = 50;
+const HISTORY_LIMIT = 60;
 const FAILURE_PATTERN = /\b(fail|error)\b/i;
 const SLOW_PATTERN = /\bslow\b/i;
 
@@ -64,7 +65,10 @@ function statusKindOf(result: InvestigationResult): string {
   return "no_results";
 }
 
-export async function fakeInvestigateQuestion(question: string): Promise<Investigation> {
+export async function fakeInvestigateQuestion(
+  question: string,
+  threadId?: string,
+): Promise<Investigation> {
   await delay(simulatedLatency(question));
 
   if (FAILURE_PATTERN.test(question)) {
@@ -72,50 +76,93 @@ export async function fakeInvestigateQuestion(question: string): Promise<Investi
     throw new Error("temporary");
   }
 
+  // Resolve thread membership the way the backend does: from stored data,
+  // never from client claims about conversation shape.
+  let resolvedThreadId: string;
+  if (typeof threadId === "string" && threadId.length > 0) {
+    const root = threadStore.find((item) => item.id === threadId);
+    if (!root) {
+      throw new Error("not_found");
+    }
+    resolvedThreadId = root.threadId ?? root.id;
+  } else {
+    resolvedThreadId = "";
+  }
+
+  const id = `fake-${Date.now()}-${++idCounter}`;
   const investigation: Investigation = {
-    id: `fake-${Date.now()}-${++idCounter}`,
+    id,
+    threadId: resolvedThreadId || id,
     question,
     createdAt: Date.now(),
     result: resolveResult(question),
   };
 
-  historyStore.unshift(investigation);
-  if (historyStore.length > HISTORY_LIMIT) historyStore.length = HISTORY_LIMIT;
+  threadStore.unshift(investigation);
+  if (threadStore.length > HISTORY_LIMIT) threadStore.length = HISTORY_LIMIT;
 
   return sanitizeInvestigation(investigation) as Investigation;
 }
 
-export async function fakeGetInvestigation(id: string): Promise<Investigation | null> {
+/**
+ * Load a full conversation thread. Any turn id works — resolved to the
+ * thread root exactly like the backend.
+ */
+export async function fakeGetThread(id: string): Promise<Thread | null> {
   await delay(250);
-  const found = historyStore.find((item) => item.id === id);
-  return found ? sanitizeInvestigation(found) : null;
+  const anchor = threadStore.find((item) => item.id === id);
+  if (!anchor) return null;
+  const threadId = anchor.threadId ?? anchor.id;
+  const turns = threadStore
+    .filter((item) => (item.threadId ?? item.id) === threadId)
+    .sort((a, b) => a.createdAt - b.createdAt);
+  return sanitizeThread(turns);
 }
 
+/**
+ * Sidebar list: one entry per thread, represented by its newest turn.
+ */
 export async function fakeGetHistory(): Promise<HistoryItem[]> {
   await delay(200);
-  return historyStore
-    .filter((item) => item.archived !== true)
+  const threads = new Map<
+    string,
+    { item: Investigation; turnCount: number }
+  >();
+  for (const item of threadStore) {
+    if (item.archived === true) continue;
+    const key = item.threadId ?? item.id;
+    const existing = threads.get(key);
+    if (existing) {
+      existing.turnCount += 1;
+      continue; // store is newest-first; keep the newest as representative
+    }
+    threads.set(key, { item, turnCount: 1 });
+  }
+
+  return [...threads.values()]
     .sort((a, b) => {
-      const pa = a.pinned === true ? 1 : 0;
-      const pb = b.pinned === true ? 1 : 0;
-      if (pa !== pb) return pb - pa; // pinned first
-      return b.createdAt - a.createdAt; // newest first
+      const pa = a.item.pinned === true ? 1 : 0;
+      const pb = b.item.pinned === true ? 1 : 0;
+      if (pa !== pb) return pb - pa;
+      return b.item.createdAt - a.item.createdAt;
     })
-    .map((item) => ({
+    .map(({ item, turnCount }) => ({
       id: item.id,
+      threadId: item.threadId ?? item.id,
       question: item.title ?? item.question,
       createdAt: item.createdAt,
       evidenceStatus:
         item.result.kind === "report"
           ? item.result.evidenceStatus
           : item.result.kind === "safety"
-            ? "insufficient"
-            : "unverified",
+            ? ("insufficient" as const)
+            : ("unverified" as const),
+      turnCount,
       pinned: item.pinned === true,
     }));
 }
 
-/** Session-local organization flags, mirroring the backend schema. */
+/** Thread-wide organization flags, mirroring the backend schema. */
 interface FakeFlags {
   title?: string;
   pinned?: boolean;
@@ -123,48 +170,59 @@ interface FakeFlags {
 }
 
 function findFake(id: string): (Investigation & FakeFlags) | undefined {
-  return historyStore.find((item) => item.id === id);
+  return threadStore.find((item) => item.id === id);
 }
 
-export async function fakeRenameInvestigation(
+/** Collect every turn of the thread the given id belongs to. */
+function threadTurns(id: string): (Investigation & FakeFlags)[] {
+  const anchor = findFake(id);
+  if (!anchor) return [];
+  const rootId = anchor.threadId ?? anchor.id;
+  return threadStore.filter((item) => (item.threadId ?? item.id) === rootId);
+}
+
+export async function fakeRenameThread(
   id: string,
   title: string,
 ): Promise<{ id: string; title: string }> {
   await delay(180);
-  const item = findFake(id);
-  if (!item) throw new Error("not_found");
-  item.title = title;
-  return { id, title };
+  const turns = threadTurns(id);
+  if (turns.length === 0) throw new Error("not_found");
+  for (const turn of turns) turn.title = title;
+  return { id: turns[0].threadId ?? turns[0].id, title };
 }
 
-export async function fakeSetInvestigationPinned(
+export async function fakeSetThreadPinned(
   id: string,
   pinned: boolean,
 ): Promise<{ id: string; pinned: boolean }> {
   await delay(140);
-  const item = findFake(id);
-  if (!item) throw new Error("not_found");
-  item.pinned = pinned || undefined;
-  return { id, pinned };
+  const turns = threadTurns(id);
+  if (turns.length === 0) throw new Error("not_found");
+  for (const turn of turns) turn.pinned = pinned || undefined;
+  return { id: turns[0].threadId ?? turns[0].id, pinned };
 }
 
-export async function fakeSetInvestigationArchived(
+export async function fakeSetThreadArchived(
   id: string,
   archived: boolean,
 ): Promise<{ id: string; archived: boolean }> {
   await delay(140);
-  const item = findFake(id);
-  if (!item) throw new Error("not_found");
-  item.archived = archived || undefined;
-  return { id, archived };
+  const turns = threadTurns(id);
+  if (turns.length === 0) throw new Error("not_found");
+  for (const turn of turns) turn.archived = archived || undefined;
+  return { id: turns[0].threadId ?? turns[0].id, archived };
 }
 
-export async function fakeDeleteInvestigation(id: string): Promise<{ id: string }> {
+export async function fakeDeleteThread(id: string): Promise<{ id: string }> {
   await delay(160);
-  const index = historyStore.findIndex((item) => item.id === id);
-  if (index === -1) throw new Error("not_found");
-  historyStore.splice(index, 1);
-  return { id };
+  const turns = threadTurns(id);
+  if (turns.length === 0) throw new Error("not_found");
+  const ids = new Set(turns.map((turn) => turn.id));
+  for (let i = threadStore.length - 1; i >= 0; i -= 1) {
+    if (ids.has(threadStore[i].id)) threadStore.splice(i, 1);
+  }
+  return { id: turns[0].threadId ?? turns[0].id };
 }
 
 export async function fakeApiStatus(): Promise<{

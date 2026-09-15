@@ -24,11 +24,11 @@ import { toast } from "sonner";
 import { cn } from "@/lib/utils";
 import { useAuth } from "@/hooks/use-auth";
 import {
-  deleteInvestigation,
+  deleteThread,
   getHistory,
-  renameInvestigation,
-  setInvestigationArchived,
-  setInvestigationPinned,
+  renameThread,
+  setThreadArchived,
+  setThreadPinned,
 } from "@/services/api";
 import type { HistoryItem } from "@/types/investigation";
 import {
@@ -53,10 +53,10 @@ interface SidebarProps {
   /** Toggle fake-API mode (fires a toast, page reloads are not needed). */
   onToggleFakeApi: (enabled: boolean) => void;
   apiOnline: boolean;
-  /** Restore a stored investigation by id (Recent list click). */
+  /** Restore a stored conversation by any of its turn ids (Recent click). */
   onRestoreInvestigation: (id: string) => void;
-  /** Id of the investigation currently open in the workspace. */
-  activeInvestigationId: string | null;
+  /** Thread id of the conversation currently open in the workspace. */
+  activeThreadId: string | null;
 }
 
 const STORAGE_KEY = "syntra.sidebar.collapsed";
@@ -95,9 +95,9 @@ function RecentItem({
     if (input) input.value = ""; // clear for next time
     setRenaming(false);
     if (value.trim().length === 0 || value === item.question) return;
-    renameInvestigation(item.id, value)
+    renameThread(item.threadId, value)
       .then(() => {
-        toast.success("Title updated", { description: "The investigation was renamed." });
+        toast.success("Title updated", { description: "The conversation was renamed." });
         onChanged();
       })
       .catch((error: unknown) => {
@@ -109,12 +109,12 @@ function RecentItem({
 
   const handlePin = () => {
     const next = !item.pinned;
-    setInvestigationPinned(item.id, next)
+    setThreadPinned(item.threadId, next)
       .then(() => {
         toast(next ? "Pinned" : "Unpinned", {
           description: next
-            ? "This investigation now sorts to the top of Recent."
-            : "This investigation returned to its normal position.",
+            ? "This conversation now sorts to the top of Recent."
+            : "This conversation returned to its normal position.",
         });
         onChanged();
       })
@@ -126,9 +126,9 @@ function RecentItem({
   };
 
   const handleArchive = () => {
-    setInvestigationArchived(item.id, true)
+    setThreadArchived(item.threadId, true)
       .then(() => {
-        toast("Investigation archived", {
+        toast("Conversation archived", {
           description: "It was removed from the Recent list. Find it again in History."
         });
         onChanged();
@@ -141,10 +141,10 @@ function RecentItem({
   };
 
   const handleDelete = () => {
-    deleteInvestigation(item.id)
+    deleteThread(item.threadId)
       .then(() => {
-        toast.success("Investigation deleted", {
-          description: "The stored investigation was permanently removed.",
+        toast.success("Conversation deleted", {
+          description: "The conversation and all of its exchanges were removed.",
         });
         onChanged();
       })
@@ -156,7 +156,7 @@ function RecentItem({
   };
 
   const handleShare = () => {
-    const url = `${window.location.origin}/investigate?id=${encodeURIComponent(item.id)}`;
+    const url = `${window.location.origin}/investigate?id=${encodeURIComponent(item.threadId)}`;
     navigator.clipboard
       ?.writeText(url)
       .then(() => {
@@ -264,7 +264,7 @@ function SidebarContent({
   onToggleCollapse,
   onNavigateAway,
   onRestoreInvestigation,
-  activeInvestigationId,
+  activeThreadId,
 }: {
   active: SyntraView;
   onNavigate: (view: SyntraView) => void;
@@ -275,7 +275,7 @@ function SidebarContent({
   onToggleCollapse?: () => void;
   onNavigateAway: () => void;
   onRestoreInvestigation: (id: string) => void;
-  activeInvestigationId: string | null;
+  activeThreadId: string | null;
 }) {
   const navigate = useNavigate();
   const { user, signOut } = useAuth();
@@ -386,15 +386,15 @@ function SidebarContent({
             </div>
           ) : recent.length === 0 ? (
             <p className="px-4 pb-2 text-[11px] leading-relaxed text-muted-foreground">
-              Investigations you run appear here so you can reopen them.
+              Conversations you start appear here so you can reopen them.
             </p>
           ) : (
-            <div className="syn-recent-list" role="list" aria-label="Recent investigations">
+            <div className="syn-recent-list" role="list" aria-label="Recent conversations">
               {recent.slice(0, RECENT_LIMIT).map((item) => (
-                <div key={item.id} role="listitem">
+                <div key={item.threadId} role="listitem">
                   <RecentItem
                     item={item}
-                    active={item.id === activeInvestigationId}
+                    active={item.threadId === activeThreadId}
                     onOpen={(id) => {
                       onRestoreInvestigation(id);
                       onNavigateAway();
@@ -491,7 +491,7 @@ export function Sidebar({
   onToggleFakeApi,
   apiOnline,
   onRestoreInvestigation,
-  activeInvestigationId,
+  activeThreadId,
 }: SidebarProps) {
   // Read the persisted preference lazily so no effect-driven setState is needed.
   const [collapsed, setCollapsed] = useState(() => {
@@ -533,7 +533,7 @@ export function Sidebar({
             onToggleCollapse={toggleCollapsed}
             onNavigateAway={() => undefined}
             onRestoreInvestigation={onRestoreInvestigation}
-            activeInvestigationId={activeInvestigationId}
+            activeThreadId={activeThreadId}
           />
         </div>
       </aside>
@@ -557,7 +557,7 @@ export function Sidebar({
               apiOnline={apiOnline}
               onNavigateAway={onClose}
               onRestoreInvestigation={onRestoreInvestigation}
-              activeInvestigationId={activeInvestigationId}
+              activeThreadId={activeThreadId}
             />
           </div>
         </div>
