@@ -7,7 +7,7 @@ import {
   MonitorCog,
   Users,
 } from "lucide-react";
-import { useCallback, useMemo, useRef, useState } from "react";
+import { useCallback, useRef, useState } from "react";
 import { AttackChain } from "./AttackChain";
 import { Detection, Mitigation } from "./DefenseSections";
 import { IdentifiedEntities } from "./IdentifiedEntities";
@@ -15,7 +15,7 @@ import { LabEnvironmentOverview, IsolatedLab, LabValidation } from "./LabSection
 import { TechniqueDetails } from "./TechniqueDetails";
 import { SourceList } from "./SourceList";
 import { EvidenceList } from "./EvidencePanel";
-import type { Evidence, InvestigationReport } from "@/types/investigation";
+import type { InvestigationReport } from "@/types/investigation";
 
 /** Stable DOM id for the Evidence & Sources section (scroll target). */
 const EVIDENCE_SECTION_ID = "syn-evidence-section";
