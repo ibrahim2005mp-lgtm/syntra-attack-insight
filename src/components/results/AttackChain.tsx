@@ -1,5 +1,5 @@
-import { ArrowDown, ArrowRight, Ban, Check, Copy } from "lucide-react";
-import { useMemo, useState } from "react";
+import { ArrowDown, ArrowLeft, ArrowRight, Ban, Check, Copy } from "lucide-react";
+import { Fragment, useMemo, useState } from "react";
 import { toast } from "sonner";
 import { StatusBadge } from "@/components/StatusBadge";
 import type { AttackStage } from "@/types/investigation";
@@ -9,6 +9,24 @@ interface AttackChainProps {
   onOpenEvidence: (stage: AttackStage) => void;
   onCopyTechniqueId?: (id: string) => void;
 }
+
+/** Cards per serpentine row (matches the 4-card column template in CSS). */
+const CARDS_PER_ROW = 4;
+
+/** Grid column (1-indexed) of the k-th card in a row. Cards sit on odd columns. */
+function cardColumn(rowIndex: number, k: number): number {
+  // Even rows flow left→right (cols 1,3,5,7); odd rows right→left (cols 7,5,3,1).
+  return rowIndex % 2 === 0 ? 2 * k + 1 : 2 * (CARDS_PER_ROW - 1 - k) + 1;
+}
+
+/** Grid column of the arrow between the k-th and (k+1)-th card of a row. */
+function arrowColumn(rowIndex: number, k: number): number {
+  return rowIndex % 2 === 0 ? 2 * k + 2 : 2 * (CARDS_PER_ROW - 1 - k);
+}
+
+type ChainNode =
+  | { kind: "stage"; key: string; stage: AttackStage }
+  | { kind: "terminal"; key: string };
 
 function StageCard({
   stage,
@@ -77,15 +95,29 @@ function TerminalNode() {
 
 /**
  * The attack chain is SYNTRA's core analytical visual: it shows how far the
- * evidence actually supports the attack. Direction is unambiguous — horizontal
- * on desktop, vertical on mobile — and unsupported stages never continue the
- * chain past a "No Verified Evidence" terminal.
+ * evidence actually supports the attack. On desktop the chain flows as a
+ * serpentine ("snake"): up to 4 stages left→right, a down connector under the
+ * row's last card, then the next row continues right→left, and so on — the
+ * rows fold back on themselves so the sequence always reads as one flow.
+ * Unsupported stages never continue the chain past a "No Verified Evidence"
+ * terminal. On mobile it falls back to a simple top-to-bottom list.
  */
 export function AttackChain({ stages, onOpenEvidence, onCopyTechniqueId }: AttackChainProps) {
   const display = useMemo(() => {
     const verified = stages.filter((s) => s.status !== "unverified" && s.status !== "insufficient");
     const unverified = stages.filter((s) => s.status === "unverified" || s.status === "insufficient");
-    return { verified, unverified };
+    // Linear evidence-ordered node sequence, chunked into serpentine rows.
+    const nodes: ChainNode[] = verified.map((stage) => ({
+      kind: "stage" as const,
+      key: stage.techniqueId,
+      stage,
+    }));
+    if (unverified.length > 0) nodes.push({ kind: "terminal", key: "__terminal__" });
+    const rows: ChainNode[][] = [];
+    for (let i = 0; i < nodes.length; i += CARDS_PER_ROW) {
+      rows.push(nodes.slice(i, i + CARDS_PER_ROW));
+    }
+    return { verified, unverified, rows };
   }, [stages]);
 
   if (stages.length === 0) return null;
@@ -94,26 +126,45 @@ export function AttackChain({ stages, onOpenEvidence, onCopyTechniqueId }: Attac
 
   return (
     <>
-      {/* Desktop: horizontal chain */}
-      <div className="syn-chain hidden lg:flex" role="list" aria-label="Attack chain, left to right">
-        {display.verified.map((stage, i) => (
-          <div key={stage.techniqueId} className="contents" role="listitem">
-            {i > 0 && (
-              <div className="syn-chain-arrow" aria-hidden="true">
-                <ArrowRight className="size-4" />
-              </div>
-            )}
-            <StageCard stage={stage} onOpenEvidence={onOpenEvidence} onCopyTechniqueId={onCopyTechniqueId} />
-          </div>
-        ))}
-        {hasUnverified && (
-          <div className="contents" role="listitem">
-            <div className="syn-chain-arrow" aria-hidden="true">
-              <ArrowRight className="size-4" />
-            </div>
-            <TerminalNode />
-          </div>
-        )}
+      {/* Desktop: serpentine chain (row 1 →, drop down, row 2 ←, drop down, …) */}
+      <div className="syn-chain hidden lg:grid" role="list" aria-label="Attack chain">
+        {display.rows.map((row, rowIndex) => {
+          const rtl = rowIndex % 2 === 1;
+          const gridRow = 2 * rowIndex + 1;
+          return (
+            <Fragment key={`row-${rowIndex}`}>
+              {row.map((node, k) => (
+                <Fragment key={node.key}>
+                  {k > 0 && (
+                    <div
+                      className="syn-chain-arrow"
+                      style={{ gridRow, gridColumn: arrowColumn(rowIndex, k - 1) }}
+                      aria-hidden="true"
+                    >
+                      {rtl ? <ArrowLeft className="size-4" /> : <ArrowRight className="size-4" />}
+                    </div>
+                  )}
+                  <div className="syn-chain-cell" style={{ gridRow, gridColumn: cardColumn(rowIndex, k) }} role="listitem">
+                    {node.kind === "stage" ? (
+                      <StageCard stage={node.stage} onOpenEvidence={onOpenEvidence} onCopyTechniqueId={onCopyTechniqueId} />
+                    ) : (
+                      <TerminalNode />
+                    )}
+                  </div>
+                </Fragment>
+              ))}
+              {rowIndex < display.rows.length - 1 && (
+                <div
+                  className="syn-chain-arrow syn-chain-drop"
+                  style={{ gridRow: gridRow + 1, gridColumn: cardColumn(rowIndex, row.length - 1) }}
+                  aria-hidden="true"
+                >
+                  <ArrowDown className="size-4" />
+                </div>
+              )}
+            </Fragment>
+          );
+        })}
       </div>
 
       {/* Mobile/tablet: vertical chain */}
