@@ -5,9 +5,11 @@ import { cn } from "@/lib/utils";
 import { validateExternalUrl, safeUrlLabel } from "@/security/urlValidation";
 import type { Evidence } from "@/types/investigation";
 
-/** Evidence provenance descriptor rendered as a neutral badge. */
+/** Evidence provenance descriptor, rendered in white like the source row. */
 function ProvenanceBadge({ provenance }: { provenance: string }) {
-  return <NeutralBadge>{provenance}</NeutralBadge>;
+  return (
+    <span className="syn-badge syn-badge-neutral !text-foreground">{provenance}</span>
+  );
 }
 
 function EvidenceCard({ item, highlighted }: { item: Evidence; highlighted?: boolean }) {
@@ -24,12 +26,12 @@ function EvidenceCard({ item, highlighted }: { item: Evidence; highlighted?: boo
 
       <blockquote className="syn-excerpt mt-2.5">“{item.excerpt}”</blockquote>
 
-      <div className="mt-2.5 flex flex-wrap items-center gap-2 text-[11px] text-muted-foreground">
+      <div className="mt-2.5 flex flex-wrap items-center gap-2 text-[11px] text-foreground">
         <span className="inline-flex items-center gap-1">
           <FileText className="size-3" aria-hidden="true" />
           Source
         </span>
-        <span className="font-medium text-foreground/80">{item.sourceName}</span>
+        <span className="font-medium text-foreground">{item.sourceName}</span>
         {item.provenance && <ProvenanceBadge provenance={item.provenance} />}
         <span className="ml-auto">
           {urlCheck.ok ? (

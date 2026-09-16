@@ -669,7 +669,7 @@
     font-family: var(--syntra-font-mono);
     font-size: 0.75rem;
     line-height: 1.6;
-    color: var(--muted-foreground);
+    color: var(--foreground);
     background: var(--syntra-bg);
     border: 1px solid var(--syntra-border);
     border-left: 2px solid var(--syntra-orange);
