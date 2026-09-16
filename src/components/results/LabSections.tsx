@@ -31,28 +31,47 @@ function phaseForStep(stepIndex: number, total: number): number {
 }
 
 /**
- * Section 7 — Lab Environment Overview: supported runtime platforms with
- * SYNTRA's selection note (dark-theme analogue of the photo's platform row).
+ * Section 7 — Lab Environment Overview: supported runtime platforms as
+ * selectable buttons. Selection is user-controlled (defaults to the runtime
+ * SYNTRA recommends for the technique).
  */
-export function LabEnvironmentOverview({ lab }: { lab: LabEnvironment }) {
+export function LabEnvironmentOverview({
+  lab,
+  selectedPlatform,
+  onSelectPlatform,
+}: {
+  lab: LabEnvironment;
+  /** Currently selected platform (already falls back to the recommendation). */
+  selectedPlatform: LabPlatform;
+  onSelectPlatform: (platform: LabPlatform) => void;
+}) {
   return (
     <div className="syn-card p-4">
       <p className="text-xs leading-relaxed text-muted-foreground">
         SYNTRA provides multiple isolated lab environments to support practical validation
         of applicable techniques. The required runtime is selected automatically based on
-        the technique.
+        the technique — you can switch it below.
       </p>
       <div className="mt-4 grid grid-cols-3 gap-3">
         {(Object.keys(PLATFORM_ICON) as LabPlatform[]).map((platform) => {
           const Icon = PLATFORM_ICON[platform];
-          const selected = platform === lab.platform;
+          const selected = platform === selectedPlatform;
+          const recommended = platform === lab.platform;
           return (
-            <div
+            <button
               key={platform}
+              type="button"
+              onClick={() => onSelectPlatform(platform)}
+              aria-pressed={selected}
+              title={
+                recommended
+                  ? `${LAB_PLATFORM_LABEL[platform]} — recommended for ${lab.techniqueId}`
+                  : `Run the lab in ${LAB_PLATFORM_LABEL[platform]}`
+              }
               className={
                 selected
-                  ? "flex flex-col items-center gap-1.5 rounded-md border border-[color-mix(in_oklab,var(--syntra-orange)_45%,var(--syntra-border))] bg-[var(--syntra-orange-soft)] p-3"
-                  : "flex flex-col items-center gap-1.5 rounded-md border border-border bg-[var(--syntra-surface-soft)] p-3 opacity-70"
+                  ? "flex cursor-pointer flex-col items-center gap-1.5 rounded-md border border-[color-mix(in_oklab,var(--syntra-orange)_45%,var(--syntra-border))] bg-[var(--syntra-orange-soft)] p-3 transition-colors outline-none focus-visible:ring-2 focus-visible:ring-ring/50"
+                  : "flex cursor-pointer flex-col items-center gap-1.5 rounded-md border border-border bg-[var(--syntra-surface-soft)] p-3 transition-colors outline-none hover:border-[color-mix(in_oklab,var(--syntra-orange)_35%,var(--syntra-border))] hover:bg-[color-mix(in_oklab,var(--syntra-orange)_5%,var(--syntra-surface-soft))] focus-visible:ring-2 focus-visible:ring-ring/50"
               }
             >
               <Icon
@@ -65,7 +84,12 @@ export function LabEnvironmentOverview({ lab }: { lab: LabEnvironment }) {
               <span className="text-[10px] text-muted-foreground">
                 {platform === "windows" ? "Windows VM" : platform === "linux" ? "Linux VM" : "Android Emulator"}
               </span>
-            </div>
+              {recommended && (
+                <span className="text-[9px] font-semibold uppercase tracking-wider text-[var(--syntra-orange)]">
+                  Recommended
+                </span>
+              )}
+            </button>
           );
         })}
       </div>
@@ -77,13 +101,13 @@ export function LabEnvironmentOverview({ lab }: { lab: LabEnvironment }) {
  * Section 8 — Controlled Attack Validation: the lab fact sheet plus the
  * guided launch action. Everything is descriptive; nothing executes here.
  */
-export function LabValidation({ lab }: { lab: LabEnvironment }) {
+export function LabValidation({ lab, selectedPlatform }: { lab: LabEnvironment; selectedPlatform: LabPlatform }) {
   const [launched, setLaunched] = useState(false);
 
   const facts: [string, string][] = [
     ["Technique", `${lab.techniqueId} — ${lab.techniqueName}`],
     ["Lab Type", lab.labType],
-    ["Selected Platform", LAB_PLATFORM_LABEL[lab.platform]],
+    ["Selected Platform", `${LAB_PLATFORM_LABEL[selectedPlatform]}${selectedPlatform !== lab.platform ? " (manual selection)" : ""}`],
     ["Runtime Environment", lab.runtimeEnvironment],
     ["Network Mode", lab.networkMode],
     ["Validation Source", lab.validationSource],
@@ -150,7 +174,7 @@ export function LabValidation({ lab }: { lab: LabEnvironment }) {
             toast(launched ? "Lab session ended" : "Lab session started", {
               description: launched
                 ? "The isolated lab environment was released."
-                : `${lab.techniqueId} validation is running inside the isolated ${LAB_PLATFORM_LABEL[lab.platform]} environment.`,
+                : `${lab.techniqueId} validation is running inside the isolated ${LAB_PLATFORM_LABEL[selectedPlatform]} environment.`,
             });
             window.setTimeout(() => {
               const el = document.getElementById("syn-isolated-lab");
@@ -184,7 +208,7 @@ export function LabValidation({ lab }: { lab: LabEnvironment }) {
  * console panel, the guided step list, and the safety notice. The session is
  * a guided walkthrough — no live execution happens in the browser.
  */
-export function IsolatedLab({ lab }: { lab: LabEnvironment }) {
+export function IsolatedLab({ lab, selectedPlatform }: { lab: LabEnvironment; selectedPlatform: LabPlatform }) {
   const [currentStep, setCurrentStep] = useState(0);
   const [running, setRunning] = useState(false);
   const total = lab.sessionSteps.length;
@@ -258,9 +282,9 @@ export function IsolatedLab({ lab }: { lab: LabEnvironment }) {
               {(
                 [
                   ["Technique", lab.techniqueId],
-                  ["Platform", LAB_PLATFORM_LABEL[lab.platform]],
-                  ["Environment", lab.runtimeEnvironment],
-                  ["Operating System", lab.platform === "windows" ? "Windows 10" : lab.platform === "linux" ? "Ubuntu LTS" : "Android"],
+                  ["Platform", LAB_PLATFORM_LABEL[selectedPlatform]],
+                  ["Environment", selectedPlatform === "android" ? "Android Emulator" : lab.runtimeEnvironment],
+                  ["Operating System", selectedPlatform === "windows" ? "Windows 10" : selectedPlatform === "linux" ? "Ubuntu LTS" : "Android"],
                   ["Network Mode", lab.networkMode],
                   ["Status", running ? "Connected" : "Ready"],
                   ["Estimated Duration", lab.estimatedDuration],

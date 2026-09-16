@@ -15,7 +15,7 @@ import { LabEnvironmentOverview, IsolatedLab, LabValidation } from "./LabSection
 import { TechniqueDetails } from "./TechniqueDetails";
 import { SourceList } from "./SourceList";
 import { EvidenceList } from "./EvidencePanel";
-import type { InvestigationReport } from "@/types/investigation";
+import type { InvestigationReport, LabPlatform } from "@/types/investigation";
 
 /** Stable DOM id for the Evidence & Sources section (scroll target). */
 const EVIDENCE_SECTION_ID = "syn-evidence-section";
@@ -92,6 +92,8 @@ export function InvestigationResultView({
   /** Technique currently targeted by a name click — drives evidence highlight. */
   const [highlightedRefId, setHighlightedRefId] = useState<string | null>(null);
   const highlightTimer = useRef<number | null>(null);
+  /** Lab platform chosen in the environment overview (defaults to recommendation). */
+  const [labPlatform, setLabPlatform] = useState<LabPlatform | null>(null);
 
   /**
    * Jump to the Evidence & Sources section and briefly highlight the
@@ -190,12 +192,16 @@ export function InvestigationResultView({
       {report.lab && (
         <>
           <Section num="07" icon={<Cpu className="size-3.5 text-[var(--syntra-orange)]" aria-hidden="true" />} title="Controlled Attack Validation">
-            <LabValidation lab={report.lab} />
+            <LabValidation lab={report.lab} selectedPlatform={labPlatform ?? report.lab.platform} />
           </Section>
           <Section num="08" icon={<MonitorCog className="size-3.5 text-[var(--syntra-orange)]" aria-hidden="true" />} title="Isolated Lab Environment">
             <div className="flex flex-col gap-4">
-              <LabEnvironmentOverview lab={report.lab} />
-              <IsolatedLab lab={report.lab} />
+              <LabEnvironmentOverview
+                lab={report.lab}
+                selectedPlatform={labPlatform ?? report.lab.platform}
+                onSelectPlatform={setLabPlatform}
+              />
+              <IsolatedLab lab={report.lab} selectedPlatform={labPlatform ?? report.lab.platform} />
             </div>
           </Section>
         </>
