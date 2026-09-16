@@ -94,14 +94,11 @@ export function InvestigationResultView({
   const highlightTimer = useRef<number | null>(null);
 
   /**
-   * Jump to the Evidence & Sources section, make sure it is open, and
-   * briefly highlight the clicked technique's evidence records.
+   * Jump to the Evidence & Sources section and briefly highlight the
+   * clicked technique's evidence records. The section is always expanded,
+   * so only the scroll and highlight are needed.
    */
   const handleOpenStageEvidence = useCallback((stage: { techniqueId: string }) => {
-    const section = document.getElementById(EVIDENCE_SECTION_ID);
-    const toggle = section?.querySelector<HTMLButtonElement>("button[aria-expanded]");
-    if (toggle && toggle.getAttribute("aria-expanded") === "false") toggle.click();
-
     if (highlightTimer.current !== null) window.clearTimeout(highlightTimer.current);
     setHighlightedRefId(stage.techniqueId);
     highlightTimer.current = window.setTimeout(() => {
@@ -109,10 +106,9 @@ export function InvestigationResultView({
       highlightTimer.current = null;
     }, 2400);
 
-    // Wait a frame so the section is expanded before measuring/scrolling.
-    window.requestAnimationFrame(() => {
-      document.getElementById(EVIDENCE_SECTION_ID)?.scrollIntoView({ behavior: "smooth", block: "start" });
-    });
+    document
+      .getElementById(EVIDENCE_SECTION_ID)
+      ?.scrollIntoView({ behavior: "smooth", block: "start" });
   }, []);
 
   return (
@@ -176,14 +172,13 @@ export function InvestigationResultView({
         </div>
       </Section>
 
-      {/* 06 — Evidence & Sources (scroll target for technique-name clicks) */}
+      {/* 06 — Evidence & Sources (always visible; scroll target for
+          technique-name clicks) */}
       <Section
         sectionId={EVIDENCE_SECTION_ID}
         num="06"
         icon={<ClipboardList className="size-3.5 text-[var(--syntra-orange)]" aria-hidden="true" />}
         title="Evidence & Sources"
-        collapsible
-        defaultOpen={false}
       >
         <div className="flex flex-col gap-4">
           <EvidenceList items={report.evidence} highlightRefId={highlightedRefId} />

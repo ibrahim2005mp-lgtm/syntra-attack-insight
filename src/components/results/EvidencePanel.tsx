@@ -122,27 +122,13 @@ export function EvidencePanel({ title, items, onClose, highlightRefId }: Evidenc
 
 /** Inline, always-visible list used by the full Evidence section. */
 export function EvidenceList({ items, highlightRefId }: { items: Evidence[]; highlightRefId?: string | null }) {
-  const [expanded, setExpanded] = useState(false);
-  // Keep the highlighted technique's records visible when it is targeted.
-  const showHighlighted = highlightRefId != null && items.some((item) => item.refId === highlightRefId);
-  const visible = expanded || showHighlighted ? items : items.slice(0, 4);
   return (
     <div className="flex flex-col gap-2.5">
-      {visible.map((item) => (
+      {items.map((item) => (
         <Fragment key={item.id}>
           <EvidenceCard item={item} highlighted={highlightRefId != null && item.refId === highlightRefId} />
         </Fragment>
       ))}
-      {items.length > 4 && (
-        <button
-          type="button"
-          className="self-start rounded-md border border-border px-3 py-1.5 text-xs font-medium text-muted-foreground transition-colors hover:border-[var(--syntra-orange)] hover:text-foreground"
-          onClick={() => setExpanded((v) => !v)}
-          aria-expanded={expanded}
-        >
-          {expanded ? "Show less" : `Show all ${items.length} records`}
-        </button>
-      )}
     </div>
   );
 }
