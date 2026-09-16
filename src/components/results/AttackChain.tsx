@@ -6,6 +6,7 @@ import type { AttackStage } from "@/types/investigation";
 
 interface AttackChainProps {
   stages: AttackStage[];
+  /** Jump to the Evidence & Sources section, highlighting this technique's evidence. */
   onOpenEvidence: (stage: AttackStage) => void;
   onCopyTechniqueId?: (id: string) => void;
 }
@@ -69,14 +70,14 @@ function StageCard({
           {stage.tactic}
         </span>
       </div>
-      <p className="text-[13px] font-medium leading-snug text-foreground">{stage.techniqueName}</p>
       <button
         type="button"
         onClick={() => onOpenEvidence(stage)}
-        className="mt-auto inline-flex items-center gap-1 self-start text-[11px] font-medium text-muted-foreground transition-colors hover:text-[var(--syntra-orange)]"
+        className="mt-auto text-left text-[13px] font-medium leading-snug text-foreground transition-colors hover:text-[var(--syntra-orange)]"
+        title={`Jump to evidence for ${stage.techniqueId}`}
+        aria-label={`${stage.techniqueName} — view evidence`}
       >
-        View evidence
-        <span aria-hidden="true">→</span>
+        {stage.techniqueName}
       </button>
       <StatusBadge status={stage.status} />
     </div>

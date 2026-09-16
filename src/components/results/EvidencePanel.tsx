@@ -1,6 +1,7 @@
 import { ExternalLink, FileText, LinkIcon, ShieldQuestion, X } from "lucide-react";
 import { Fragment, useMemo, useState } from "react";
 import { NeutralBadge, StatusBadge } from "@/components/StatusBadge";
+import { cn } from "@/lib/utils";
 import { validateExternalUrl, safeUrlLabel } from "@/security/urlValidation";
 import type { Evidence } from "@/types/investigation";
 
@@ -9,10 +10,10 @@ function ProvenanceBadge({ provenance }: { provenance: string }) {
   return <NeutralBadge>{provenance}</NeutralBadge>;
 }
 
-function EvidenceCard({ item }: { item: Evidence }) {
+function EvidenceCard({ item, highlighted }: { item: Evidence; highlighted?: boolean }) {
   const urlCheck = validateExternalUrl(item.sourceUrl);
   return (
-    <article className="syn-card p-3">
+    <article className={cn("syn-card p-3", highlighted && "syn-evidence-highlight")}>
       <div className="flex flex-wrap items-center gap-2">
         {item.refId && <span className="syn-technique-id">{item.refId}</span>}
         <span className="truncate text-xs font-medium text-foreground">{item.sourceName}</span>
@@ -64,7 +65,7 @@ interface EvidencePanelProps {
  * a side context panel; on small screens the parent view renders it inline
  * below the chain (accordion pattern).
  */
-export function EvidencePanel({ title, items, onClose }: EvidencePanelProps) {
+export function EvidencePanel({ title, items, onClose, highlightRefId }: EvidencePanelProps & { highlightRefId?: string | null }) {
   const [showAll, setShowAll] = useState(false);
   const visible = showAll ? items : items.slice(0, 3);
 
@@ -101,7 +102,7 @@ export function EvidencePanel({ title, items, onClose }: EvidencePanelProps) {
 
       <div className="mt-3 flex flex-col gap-2.5">
         {visible.map((item) => (
-          <EvidenceCard key={item.id} item={item} />
+          <EvidenceCard key={item.id} item={item} highlighted={highlightRefId != null && item.refId === highlightRefId} />
         ))}
       </div>
 
@@ -120,14 +121,16 @@ export function EvidencePanel({ title, items, onClose }: EvidencePanelProps) {
 }
 
 /** Inline, always-visible list used by the full Evidence section. */
-export function EvidenceList({ items }: { items: Evidence[] }) {
+export function EvidenceList({ items, highlightRefId }: { items: Evidence[]; highlightRefId?: string | null }) {
   const [expanded, setExpanded] = useState(false);
-  const visible = expanded ? items : items.slice(0, 4);
+  // Keep the highlighted technique's records visible when it is targeted.
+  const showHighlighted = highlightRefId != null && items.some((item) => item.refId === highlightRefId);
+  const visible = expanded || showHighlighted ? items : items.slice(0, 4);
   return (
     <div className="flex flex-col gap-2.5">
       {visible.map((item) => (
         <Fragment key={item.id}>
-          <EvidenceCard item={item} />
+          <EvidenceCard item={item} highlighted={highlightRefId != null && item.refId === highlightRefId} />
         </Fragment>
       ))}
       {items.length > 4 && (

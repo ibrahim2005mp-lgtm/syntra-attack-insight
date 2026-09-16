@@ -7,17 +7,18 @@ import {
   MonitorCog,
   Users,
 } from "lucide-react";
-import { cn } from "@/lib/utils";
-import { useCallback, useMemo, useState } from "react";
+import { useCallback, useMemo, useRef, useState } from "react";
 import { AttackChain } from "./AttackChain";
 import { Detection, Mitigation } from "./DefenseSections";
 import { IdentifiedEntities } from "./IdentifiedEntities";
-import { EvidencePanel } from "./EvidencePanel";
 import { LabEnvironmentOverview, IsolatedLab, LabValidation } from "./LabSections";
 import { TechniqueDetails } from "./TechniqueDetails";
 import { SourceList } from "./SourceList";
 import { EvidenceList } from "./EvidencePanel";
-import type { AttackStage, Evidence, InvestigationReport } from "@/types/investigation";
+import type { Evidence, InvestigationReport } from "@/types/investigation";
+
+/** Stable DOM id for the Evidence & Sources section (scroll target). */
+const EVIDENCE_SECTION_ID = "syn-evidence-section";
 
 function Section({
   num,
@@ -26,6 +27,7 @@ function Section({
   children,
   collapsible = false,
   defaultOpen = true,
+  sectionId,
 }: {
   num: string;
   icon: React.ReactNode;
@@ -33,6 +35,7 @@ function Section({
   children: React.ReactNode;
   collapsible?: boolean;
   defaultOpen?: boolean;
+  sectionId?: string;
 }) {
   const [open, setOpen] = useState(defaultOpen);
   const header = (
@@ -48,13 +51,15 @@ function Section({
     </div>
   );
 
+  const toggle = useCallback(() => setOpen((v) => !v), []);
+
   return (
-    <section className="flex flex-col gap-3">
+    <section id={sectionId} className="flex flex-col gap-3 scroll-mt-4">
       {collapsible ? (
         <button
           type="button"
           className="group w-full rounded-md py-0.5 text-left"
-          onClick={() => setOpen((v) => !v)}
+          onClick={toggle}
           aria-expanded={open}
         >
           {header}
@@ -84,28 +89,31 @@ export function InvestigationResultView({
   report: InvestigationReport;
   callbacks: ResultViewCallbacks;
 }) {
-  const [selectedStage, setSelectedStage] = useState<AttackStage | null>(null);
+  /** Technique currently targeted by a name click — drives evidence highlight. */
+  const [highlightedRefId, setHighlightedRefId] = useState<string | null>(null);
+  const highlightTimer = useRef<number | null>(null);
 
-  const evidenceById = useMemo(() => {
-    const map = new Map<string, Evidence>();
-    for (const ev of report.evidence) map.set(ev.id, ev);
-    return map;
-  }, [report.evidence]);
+  /**
+   * Jump to the Evidence & Sources section, make sure it is open, and
+   * briefly highlight the clicked technique's evidence records.
+   */
+  const handleOpenStageEvidence = useCallback((stage: { techniqueId: string }) => {
+    const section = document.getElementById(EVIDENCE_SECTION_ID);
+    const toggle = section?.querySelector<HTMLButtonElement>("button[aria-expanded]");
+    if (toggle && toggle.getAttribute("aria-expanded") === "false") toggle.click();
 
-  const stageEvidence = useCallback(
-    (stage: AttackStage): Evidence[] =>
-      stage.evidenceIds.map((id) => evidenceById.get(id)).filter((e): e is Evidence => e !== undefined),
-    [evidenceById],
-  );
+    if (highlightTimer.current !== null) window.clearTimeout(highlightTimer.current);
+    setHighlightedRefId(stage.techniqueId);
+    highlightTimer.current = window.setTimeout(() => {
+      setHighlightedRefId(null);
+      highlightTimer.current = null;
+    }, 2400);
 
-  const handleOpenStageEvidence = useCallback(
-    (stage: AttackStage) => {
-      setSelectedStage((prev) => (prev?.techniqueId === stage.techniqueId ? null : stage));
-    },
-    [],
-  );
-
-  const selectedEvidence = selectedStage ? stageEvidence(selectedStage) : [];
+    // Wait a frame so the section is expanded before measuring/scrolling.
+    window.requestAnimationFrame(() => {
+      document.getElementById(EVIDENCE_SECTION_ID)?.scrollIntoView({ behavior: "smooth", block: "start" });
+    });
+  }, []);
 
   return (
     <div className="flex flex-col gap-8">
@@ -121,58 +129,32 @@ export function InvestigationResultView({
         <IdentifiedEntities entities={report.entities} relationships={report.relationships} />
       </Section>
 
-      {/* 03 — Attack Chain Overview (+ evidence side panel when a stage is
-          selected, so the chain keeps the full width otherwise). */}
+      {/* 03 — Attack Chain Overview. Clicking a technique name jumps to the
+          Evidence & Sources section and highlights that technique's records. */}
       <Section num="03" icon={<Link2 className="size-3.5 text-[var(--syntra-orange)]" aria-hidden="true" />} title="Attack Chain Overview">
-        <div
-          className={cn(
-            "grid gap-4",
-            selectedStage ? "lg:grid-cols-[minmax(0,1fr)_360px]" : "grid-cols-1",
-          )}
-        >
-          <div className="min-w-0 flex flex-col gap-3">
-            <AttackChain stages={report.attackChain} onOpenEvidence={handleOpenStageEvidence} onCopyTechniqueId={callbacks.onCopyTechniqueId} />
-            <div className="syn-card flex flex-wrap items-center gap-x-6 gap-y-1.5 px-4 py-3">
-              <p className="syn-detail-label !mt-0">Chain Details</p>
-              <span className="text-xs text-muted-foreground">
-                Total Techniques:{" "}
-                <span className="syn-mono font-semibold text-foreground">{report.attackChain.length}</span>
+        <div className="min-w-0 flex flex-col gap-3">
+          <AttackChain stages={report.attackChain} onOpenEvidence={handleOpenStageEvidence} onCopyTechniqueId={callbacks.onCopyTechniqueId} />
+          <div className="syn-card flex flex-wrap items-center gap-x-6 gap-y-1.5 px-4 py-3">
+            <p className="syn-detail-label !mt-0">Chain Details</p>
+            <span className="text-xs text-muted-foreground">
+              Total Techniques:{" "}
+              <span className="syn-mono font-semibold text-foreground">{report.attackChain.length}</span>
+            </span>
+            <span className="text-xs text-muted-foreground">
+              Evidence Records:{" "}
+              <span className="syn-mono font-semibold text-foreground">{report.evidence.length}</span>
+            </span>
+            <span className="text-xs text-muted-foreground">
+              Sources:{" "}
+              <span className="syn-mono font-semibold text-foreground">{report.sources.length}</span>
+            </span>
+            <span className="ml-auto inline-flex items-center gap-1.5 text-xs">
+              <span className="text-muted-foreground">Status:</span>
+              <span className="font-semibold text-[var(--syntra-success)]">
+                Evidence-Grounded ✓
               </span>
-              <span className="text-xs text-muted-foreground">
-                Evidence Records:{" "}
-                <span className="syn-mono font-semibold text-foreground">{report.evidence.length}</span>
-              </span>
-              <span className="text-xs text-muted-foreground">
-                Sources:{" "}
-                <span className="syn-mono font-semibold text-foreground">{report.sources.length}</span>
-              </span>
-              <span className="ml-auto inline-flex items-center gap-1.5 text-xs">
-                <span className="text-muted-foreground">Status:</span>
-                <span className="font-semibold text-[var(--syntra-success)]">
-                  Evidence-Grounded ✓
-                </span>
-              </span>
-            </div>
+            </span>
           </div>
-          {selectedStage && (
-            <>
-              {/* Desktop evidence side panel; mobile renders below */}
-              <div className="hidden lg:block">
-                <EvidencePanel
-                  title={`${selectedStage.techniqueId} — ${selectedStage.techniqueName}`}
-                  items={selectedEvidence}
-                  onClose={() => setSelectedStage(null)}
-                />
-              </div>
-              <div className="lg:hidden">
-                <EvidencePanel
-                  title={`${selectedStage.techniqueId} — ${selectedStage.techniqueName}`}
-                  items={selectedEvidence}
-                  onClose={() => setSelectedStage(null)}
-                />
-              </div>
-            </>
-          )}
         </div>
       </Section>
 
@@ -194,8 +176,9 @@ export function InvestigationResultView({
         </div>
       </Section>
 
-      {/* 06 — Evidence & Sources */}
+      {/* 06 — Evidence & Sources (scroll target for technique-name clicks) */}
       <Section
+        sectionId={EVIDENCE_SECTION_ID}
         num="06"
         icon={<ClipboardList className="size-3.5 text-[var(--syntra-orange)]" aria-hidden="true" />}
         title="Evidence & Sources"
@@ -203,7 +186,7 @@ export function InvestigationResultView({
         defaultOpen={false}
       >
         <div className="flex flex-col gap-4">
-          <EvidenceList items={report.evidence} />
+          <EvidenceList items={report.evidence} highlightRefId={highlightedRefId} />
           <SourceList sources={report.sources} />
         </div>
       </Section>

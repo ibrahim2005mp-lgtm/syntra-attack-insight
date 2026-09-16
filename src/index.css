@@ -647,6 +647,23 @@
     height: 22px;
   }
 
+  /* Highlight pulse on evidence records targeted from a technique click */
+  .syn-evidence-highlight {
+    border-color: color-mix(in oklab, var(--syntra-orange) 65%, transparent);
+    background: color-mix(in oklab, var(--syntra-orange) 10%, var(--syntra-surface));
+    animation: syn-evidence-pulse 2.4s ease-out;
+  }
+  @keyframes syn-evidence-pulse {
+    0% {
+      border-color: color-mix(in oklab, var(--syntra-orange) 90%, transparent);
+      background: color-mix(in oklab, var(--syntra-orange) 18%, var(--syntra-surface));
+    }
+    100% {
+      border-color: color-mix(in oklab, var(--syntra-orange) 40%, transparent);
+      background: color-mix(in oklab, var(--syntra-orange) 7%, var(--syntra-surface));
+    }
+  }
+
   /* Evidence / source excerpts */
   .syn-excerpt {
     font-family: var(--syntra-font-mono);

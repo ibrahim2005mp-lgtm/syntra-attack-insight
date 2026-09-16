@@ -108,9 +108,15 @@ function TechniqueCard({
             {stage.tactic}
           </button>
         </div>
-        <h3 className="mt-2 text-sm font-semibold leading-snug text-foreground">
+        <button
+          type="button"
+          onClick={() => onOpenEvidence(stage)}
+          className="mt-2 block w-full text-left text-sm font-semibold leading-snug text-foreground transition-colors hover:text-[var(--syntra-orange)]"
+          title={`Jump to evidence for ${stage.techniqueId}`}
+          aria-label={`${stage.techniqueName} — view evidence`}
+        >
           {stage.techniqueId} — {stage.techniqueName}
-        </h3>
+        </button>
       </header>
 
       {stage.description && (
@@ -176,14 +182,6 @@ function TechniqueCard({
       <div className="mt-auto flex flex-col gap-2">
         <div className="flex items-center justify-between gap-2">
           <StatusBadge status={stage.status} />
-          <button
-            type="button"
-            onClick={() => onOpenEvidence(stage)}
-            className="inline-flex items-center gap-1 text-[11px] font-medium text-muted-foreground transition-colors hover:text-[var(--syntra-orange)]"
-          >
-            View evidence
-            <span aria-hidden="true">→</span>
-          </button>
         </div>
         {typeof stage.labAvailable === "boolean" && (
           <div
