@@ -43,6 +43,37 @@ function verdictOf(turn: Turn): string {
   return "Available evidence is not sufficient.";
 }
 
+const LAST_THREAD_KEY = "syntra.lastThread";
+
+/**
+ * Id of the conversation the user last had open. Kept at module level so it
+ * survives view unmounts (Investigate → History → Investigate) and, via
+ * localStorage, full page reloads — returning to Investigate resumes the
+ * same conversation instead of starting a new one.
+ */
+let lastThreadId: string | null = (() => {
+  try {
+    return window.localStorage.getItem(LAST_THREAD_KEY);
+  } catch {
+    return null;
+  }
+})();
+
+function rememberThread(id: string | null) {
+  lastThreadId = id;
+  try {
+    if (id) window.localStorage.setItem(LAST_THREAD_KEY, id);
+    else window.localStorage.removeItem(LAST_THREAD_KEY);
+  } catch {
+    // Storage failures are non-actionable; module state still applies.
+  }
+}
+
+/** Last conversation id the workspace had open (null when none). */
+export function getLastThreadId(): string | null {
+  return lastThreadId;
+}
+
 function emptyState(): WorkspaceState {
   return {
     phase: "idle",
@@ -86,6 +117,7 @@ export function useInvestigation() {
       finishedAt: Date.now(),
       errorTurnThreadId: null,
     });
+    rememberThread(thread.threadId);
     // Let the shell (sidebar list) know a thread changed.
     window.dispatchEvent(
       new CustomEvent("syntra:history-updated", { detail: thread.threadId }),
@@ -149,15 +181,24 @@ export function useInvestigation() {
     if (pendingRetryQuestion) void ask(pendingRetryQuestion, pendingRetryThreadId ?? undefined);
   }, [ask, pendingRetryQuestion, pendingRetryThreadId]);
 
-  /** Open a stored conversation (sidebar / history / shared link). */
+  /**
+   * Open a stored conversation (sidebar / history / shared link / auto
+   * resume). With `silent`, a missing record quietly falls back to the empty
+   * workspace instead of surfacing an error — used when resuming on mount.
+   */
   const restore = useCallback(
-    async (id: string) => {
+    async (id: string, opts?: { silent?: boolean }) => {
       const runId = ++runIdRef.current;
       setState((prev) => ({ ...prev, phase: "loading", pendingQuestion: "", error: null }));
       try {
         const thread = await getThread(id);
         if (runIdRef.current !== runId) return;
         if (thread === null) {
+          if (opts?.silent) {
+            rememberThread(null);
+            setState(emptyState());
+            return;
+          }
           setState({
             ...emptyState(),
             phase: "error",
@@ -176,6 +217,11 @@ export function useInvestigation() {
           finishedAt: thread.finishedAt,
           errorTurnThreadId: null,
         });
+        rememberThread(thread.threadId);
+        if (opts?.silent) {
+          // Quiet resume: no toast spam when returning to the workspace.
+          return;
+        }
         toast("Conversation restored", {
           description:
             thread.turns.length > 1
@@ -184,6 +230,11 @@ export function useInvestigation() {
         });
       } catch {
         if (runIdRef.current !== runId) return;
+        if (opts?.silent) {
+          rememberThread(null);
+          setState(emptyState());
+          return;
+        }
         setState({
           ...emptyState(),
           phase: "error",
@@ -200,6 +251,7 @@ export function useInvestigation() {
   /** Leave the conversation view entirely (empty workspace). */
   const reset = useCallback(() => {
     runIdRef.current += 1;
+    rememberThread(null);
     setState(emptyState());
   }, []);
 
